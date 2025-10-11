@@ -1,0 +1,19 @@
+# Google API dependencies
+google-auth-oauthlib==1.2.0
+google-api-python-client==2.131.0
+google-api-core==2.19.2
+
+# Microsoft Graph dependencies
+msal==1.26.0
+requests==2.31.0
+
+# FastAPI and web server
+fastapi==0.112.2
+uvicorn==0.30.6
+pydantic[email]
+
+# Utilities
+python-dotenv==1.0.1
+python-dateutil==2.9.0.post0 
+msal
+requests

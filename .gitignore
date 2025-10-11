@@ -1,0 +1,79 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Tokens and credentials
+*.json
+!example.env
+.gcp-saved-tokens.json
+.msgraph-tokens.json
+*.pem
+*.key
+fix_env.ps1
+*_secrets.ps1
+
+# Logs
+*.log
+calendar_mcp.log
+mcp_server.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker
+*.dockerignore
+
+# UI (Next.js)
+ui/.next/
+ui/out/
+ui/node_modules/
+ui/.env.local
+ui/.env.production.local
+ui/npm-debug.log*
+ui/yarn-debug.log*
+ui/yarn-error.log*
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+

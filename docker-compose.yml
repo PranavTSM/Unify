@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # MCP Server - Google Calendar & Gmail
+  mcp_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_SCOPES=${GOOGLE_SCOPES}
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+    volumes:
+      - ./mcp_server:/app/mcp_server
+      - ./.gcp-saved-tokens.json:/app/.gcp-saved-tokens.json
+      - ./.env:/app/.env
+    networks:
+      - unify_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Aggregator Service - Unified Inbox Orchestrator
+  aggregator:
+    build:
+      context: .
+      dockerfile: Dockerfile.aggregator
+    ports:
+      - "8001:8001"
+    environment:
+      - MCP_SERVER_URL=http://mcp_server:8000
+      - LLM_SERVICE_URL=http://llm_service:8002
+      - MSFT_CLIENT_ID=${MSFT_CLIENT_ID:-}
+      - MSFT_CLIENT_SECRET=${MSFT_CLIENT_SECRET:-}
+      - MSFT_TENANT_ID=${MSFT_TENANT_ID:-}
+    volumes:
+      - ./aggregator:/app/aggregator
+      - ./.env:/app/.env
+    depends_on:
+      - mcp_server
+      - llm_service
+    networks:
+      - unify_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # LLM Service - Summarization & Action Extraction
+  llm_service:
+    build:
+      context: .
+      dockerfile: Dockerfile.llm
+    ports:
+      - "8002:8002"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./llm_service:/app/llm_service
+      - ./.env:/app/.env
+    networks:
+      - unify_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # TODO: Add UI service when ready
+  # ui:
+  #   build:
+  #     context: ./ui
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NEXT_PUBLIC_AGGREGATOR_URL=http://aggregator:8001
+  #   depends_on:
+  #     - aggregator
+  #   networks:
+  #     - unify_network
+
+networks:
+  unify_network:
+    driver: bridge
+

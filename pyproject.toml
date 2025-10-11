@@ -1,0 +1,18 @@
+[project]
+name = "unified-inbox"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi==0.112.2",
+    "google-api-core==2.19.2",
+    "google-api-python-client==2.131.0",
+    "google-auth-oauthlib==1.2.0",
+    "msal==1.26.0",
+    "pydantic[email]>=2.12.0",
+    "python-dateutil==2.9.0.post0",
+    "python-dotenv==1.0.1",
+    "requests==2.31.0",
+    "uvicorn==0.30.6",
+]
