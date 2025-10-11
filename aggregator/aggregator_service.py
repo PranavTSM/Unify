@@ -14,7 +14,7 @@ from utils.normalizer import (
     normalize_calendar_event
 )
 from utils.scoring import calculate_importance_score
-from utils.merger import merge_unified_inbox
+from utils.merger import merge_unified_inbox, merge_calendar_events
  
 logger = logging.getLogger(__name__)
  
@@ -49,7 +49,6 @@ class AggregatorService:
         raw_messages = self.aggregator.fetch_all_messages(max_per_source)
        
         # Normalize messages
-        normalized_messages = []
         normalized_by_source = {}
        
         for source, messages in raw_messages.items():
@@ -81,12 +80,12 @@ class AggregatorService:
                     logger.error(f"Error normalizing {source} message: {e}")
            
             normalized_by_source[source] = normalized
-            normalized_messages.extend(normalized)
        
-        # Sort by timestamp (newest first)
-        normalized_messages.sort(
-            key=lambda x: x.get('timestamp', ''),
-            reverse=True
+        # Merge and deduplicate messages using merger
+        normalized_messages = merge_unified_inbox(
+            gmail_messages=normalized_by_source.get("gmail", []),
+            outlook_messages=normalized_by_source.get("outlook", []),
+            teams_messages=normalized_by_source.get("teams", [])
         )
        
         # Generate summary
@@ -129,7 +128,6 @@ class AggregatorService:
         raw_events = self.aggregator.fetch_all_events(days_ahead)
        
         # Normalize events
-        normalized_events = []
         normalized_by_source = {}
        
         for source, events in raw_events.items():
@@ -150,12 +148,11 @@ class AggregatorService:
                     logger.error(f"Error normalizing {source} event: {e}")
            
             normalized_by_source[source] = normalized
-            normalized_events.extend(normalized)
        
-        # Sort by start time
-        normalized_events.sort(
-            key=lambda x: x.get('start', ''),
-            reverse=False
+        # Merge and deduplicate events using merger
+        normalized_events = merge_calendar_events(
+            google_events=normalized_by_source.get("google_calendar", []),
+            msft_events=normalized_by_source.get("microsoft_calendar", [])
         )
        
         # Generate summary

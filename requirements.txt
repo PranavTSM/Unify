@@ -1,19 +1,27 @@
-# Google API dependencies
+# Core web framework
+fastapi==0.112.2
+uvicorn==0.30.6
+pydantic[email]>=2.8.0
+
+# Google API integration
 google-auth-oauthlib==1.2.0
 google-api-python-client==2.131.0
 google-api-core==2.19.2
 
-# Microsoft Graph dependencies
+# Microsoft Graph integration
 msal==1.26.0
-requests==2.31.0
-
-# FastAPI and web server
-fastapi==0.112.2
-uvicorn==0.30.6
-pydantic[email]
 
 # Utilities
 python-dotenv==1.0.1
-python-dateutil==2.9.0.post0 
-msal
-requests
+python-dateutil==2.9.0.post0
+requests==2.31.0
+httpx>=0.25.2
+
+# LLM Service dependencies
+qdrant-client>=1.7.0
+redis>=5.0.1
+langchain>=0.1.6
+langchain-openai>=0.0.5
+langchain-community>=0.0.19
+openai>=1.10.0
+tiktoken>=0.5.2
