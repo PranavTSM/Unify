@@ -5,7 +5,7 @@ Outlook Email Fetcher via Microsoft Graph API
 import requests
 import logging
 from typing import List, Dict, Any, Optional
-from aggregator.msgraph.graph_auth import get_msgraph_headers
+from msgraph.graph_auth import get_msgraph_headers
 
 logger = logging.getLogger(__name__)
 
