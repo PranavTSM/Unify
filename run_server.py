@@ -11,9 +11,12 @@ import logging.config
 import threading
 from dotenv import load_dotenv
 
+from fastapi.middleware.cors import CORSMiddleware
+
 # --- Centralized Logging Configuration ---
 project_dir_for_log = os.path.dirname(os.path.abspath(__file__))
 log_file_path = os.path.join(project_dir_for_log, 'mcp_server.log')
+
 
 LOGGING_CONFIG = {
     'version': 1,

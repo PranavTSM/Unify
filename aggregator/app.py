@@ -6,6 +6,7 @@ Fetches data from multiple sources (Google, Microsoft) and aggregates them.
 import logging
 import os
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from dotenv import load_dotenv
@@ -31,6 +32,22 @@ app = FastAPI(
     title="Unified Inbox Aggregator",
     description="Aggregates emails, messages, and calendar events from Google and Microsoft sources",
     version="1.0.0"
+)
+
+# Add CORS middleware for frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",  # Vite dev server (default)
+        "http://localhost:5174",  # Vite dev server (alternate port)
+        "http://localhost:5175",  # Vite dev server (alternate port)
+        "http://localhost:3000",  # Production frontend
+        "http://frontend:3000",   # Docker frontend
+        "*"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
  
 @app.get("/health")

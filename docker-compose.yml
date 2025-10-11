@@ -111,19 +111,27 @@ services:
       timeout: 10s
       retries: 3
 
-  # TODO: Add UI service when ready
-  # ui:
-  #   build:
-  #     context: ./ui
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     - NEXT_PUBLIC_AGGREGATOR_URL=http://aggregator:8001
-  #   depends_on:
-  #     - aggregator
-  #   networks:
-  #     - unify_network
+  # Frontend - React UI
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_AGGREGATOR_URL=http://aggregator:8001
+      - VITE_LLM_SERVICE_URL=http://llm_service:8002
+      - VITE_ENABLE_AI_FEATURES=true
+    depends_on:
+      - aggregator
+      - llm_service
+    networks:
+      - unify_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   unify_network:

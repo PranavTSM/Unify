@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from typing import Optional
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
+from fastapi.middleware.cors import CORSMiddleware
 
 # Add parent directory to path for imports
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,6 +30,15 @@ app = FastAPI(
     description="MCP server for interacting with Google (Calendar, Gmail) and Microsoft (Outlook, Teams) APIs.",
     version="0.3.0"
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or ["*"] if you want to allow all for dev
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # --- Global State / Initialization ---
 global_credentials: Optional[Credentials] = None
