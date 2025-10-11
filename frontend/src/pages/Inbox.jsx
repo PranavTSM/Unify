@@ -16,7 +16,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
-import { getUnifiedInbox, getAllMessages } from '@/services/inbox';
+import { getAllMessages } from '@/services/inbox';
 import { transformMessages } from '@/utils/dataTransform';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ErrorMessage from '@/components/ErrorMessage';
@@ -37,23 +37,27 @@ const Inbox = () => {
   // Fetch messages from API
   const fetchMessages = async (showLoader = true) => {
     try {
+      console.log('🔄 Inbox: Starting fetch messages...');
       if (showLoader) setLoading(true);
       setError(null);
 
-      const inboxData = await getUnifiedInbox({ max_per_source: 50 });
+      console.log('📡 Inbox: Calling getAllMessages instead of getUnifiedInbox...');
+      // Use getAllMessages to get ALL messages (not just priority/unread)
+      const messagesData = await getAllMessages({ max_per_source: 50 });
+      console.log('✅ Inbox: Got all messages:', messagesData);
 
-      // Combine all messages
-      const combined = [
-        ...(inboxData.priority_messages || []),
-        ...(inboxData.unread_messages || [])
-      ];
+      // Get all normalized messages
+      const combined = messagesData.normalized || [];
+      console.log('📦 Inbox: All messages count:', combined.length);
 
       // Deduplicate by ID
       const uniqueMessages = Array.from(
         new Map(combined.map(m => [m.id, m])).values()
       );
+      console.log('✨ Inbox: Unique messages after dedup:', uniqueMessages.length);
 
       const transformed = transformMessages(uniqueMessages);
+      console.log('🔄 Inbox: Transformed messages:', transformed.length);
       
       setAllMessages(transformed);
       
@@ -63,8 +67,14 @@ const Inbox = () => {
       }
       
       setLoading(false);
+      console.log('✅ Inbox: Fetch complete!');
     } catch (err) {
-      console.error('Error fetching messages:', err);
+      console.error('❌ Inbox: Error fetching messages:', err);
+      console.error('❌ Error details:', {
+        message: err.message,
+        response: err.response,
+        stack: err.stack
+      });
       setError(err);
       setLoading(false);
     }

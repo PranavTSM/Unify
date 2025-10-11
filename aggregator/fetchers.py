@@ -43,24 +43,48 @@ class GmailFetcher(MCPFetcher):
    
     def fetch_messages(self, max_results: int = 50, query: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Fetch Gmail messages.
+        Fetch Gmail messages (2-step: get IDs, then fetch full messages).
        
         Args:
             max_results: Maximum number of messages to fetch
             query: Gmail search query
            
         Returns:
-            List of raw Gmail message objects
+            List of full Gmail message objects
         """
-        params = {"maxResults": max_results}
+        # Step 1: Get message IDs
+        params = {"max_results": max_results}
         if query:
             params["q"] = query
        
         data = self._get("/gmail/messages", params=params)
-        if data and "messages" in data:
-            logger.info(f"Fetched {len(data['messages'])} Gmail messages")
-            return data["messages"]
-        return []
+        if not data or "messages" not in data:
+            logger.warning("No Gmail messages found")
+            return []
+        
+        message_ids = data["messages"]
+        logger.info(f"Found {len(message_ids)} Gmail message IDs")
+        
+        # Step 2: Fetch full message details for each ID (with format=full to get body)
+        full_messages = []
+        for msg_stub in message_ids[:max_results]:  # Limit to max_results
+            msg_id = msg_stub.get("id")
+            if not msg_id:
+                continue
+            
+            try:
+                # IMPORTANT: format=full includes payload with headers and body
+                full_msg = self._get(f"/gmail/messages/{msg_id}", params={"format": "full"})
+                if full_msg:
+                    full_messages.append(full_msg)
+                else:
+                    logger.warning(f"Empty response for Gmail message {msg_id}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch Gmail message {msg_id}: {e}")
+                continue
+        
+        logger.info(f"Fetched {len(full_messages)} full Gmail messages (with body)")
+        return full_messages
  
  
 class OutlookFetcher(MCPFetcher):

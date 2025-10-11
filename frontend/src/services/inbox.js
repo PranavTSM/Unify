@@ -19,6 +19,13 @@ export const getUnifiedInbox = async (params = {}) => {
     include_raw = false
   } = params;
 
+  console.log('📨 Calling /unified/inbox with params:', {
+    max_per_source,
+    days_ahead,
+    priority_threshold,
+    include_raw
+  });
+
   const response = await api.get('/unified/inbox', {
     params: {
       max_per_source,
@@ -26,6 +33,13 @@ export const getUnifiedInbox = async (params = {}) => {
       priority_threshold,
       include_raw
     }
+  });
+
+  console.log('✅ /unified/inbox response:', response.data);
+  console.log('📊 Messages count:', {
+    priority: response.data.priority_messages?.length || 0,
+    unread: response.data.unread_messages?.length || 0,
+    events: response.data.upcoming_events?.length || 0
   });
 
   return response.data;

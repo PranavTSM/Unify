@@ -455,6 +455,19 @@ def teams_send_channel_message_endpoint(
 
 
 @router.get(
+    "/joined",
+    summary="List Joined Teams",
+    operation_id="teams_list_joined"
+)
+def teams_list_joined_endpoint():
+    """List all teams the user has joined (same as list teams)"""
+    result = list_teams()
+    if result is None:
+        raise HTTPException(status_code=500, detail="Failed to list joined teams")
+    return result
+
+
+@router.get(
     "/chats",
     summary="List Chats",
     operation_id="teams_list_chats"
