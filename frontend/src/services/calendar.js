@@ -100,3 +100,76 @@ export const getUpcomingEvents = async () => {
   return getCalendarEvents({ days_ahead: 7 });
 };
 
+/**
+ * Create a new calendar event
+ * @param {Object} eventData - Event details
+ * @returns {Promise} Created event
+ */
+export const createEvent = async (eventData) => {
+  const {
+    summary,
+    description,
+    location,
+    start,
+    end,
+    attendees = [],
+    reminders,
+    calendarId = 'primary'
+  } = eventData;
+
+  const payload = {
+    summary,
+    start: {
+      dateTime: start,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    },
+    end: {
+      dateTime: end,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    }
+  };
+
+  if (description) payload.description = description;
+  if (location) payload.location = location;
+  if (attendees.length > 0) {
+    payload.attendees = attendees.map(email => ({ email }));
+  }
+  if (reminders) payload.reminders = reminders;
+
+  const response = await api.post(`/mcp/calendars/${calendarId}/events`, payload);
+  return response.data;
+};
+
+/**
+ * Update an existing event
+ * @param {String} eventId - Event ID
+ * @param {Object} updates - Fields to update
+ * @returns {Promise} Updated event
+ */
+export const updateEvent = async (eventId, updates, calendarId = 'primary') => {
+  const response = await api.patch(`/mcp/calendars/${calendarId}/events/${eventId}`, updates);
+  return response.data;
+};
+
+/**
+ * Delete an event
+ * @param {String} eventId - Event ID
+ * @param {String} calendarId - Calendar ID
+ * @returns {Promise} Deletion result
+ */
+export const deleteEvent = async (eventId, calendarId = 'primary') => {
+  const response = await api.delete(`/mcp/calendars/${calendarId}/events/${eventId}`);
+  return response.data;
+};
+
+/**
+ * Quick add event using natural language
+ * @param {String} text - Natural language description (e.g., "Meeting with John tomorrow at 3pm")
+ * @param {String} calendarId - Calendar ID
+ * @returns {Promise} Created event
+ */
+export const quickAddEvent = async (text, calendarId = 'primary') => {
+  const response = await api.post(`/mcp/calendars/${calendarId}/events/quickAdd`, { text });
+  return response.data;
+};
+

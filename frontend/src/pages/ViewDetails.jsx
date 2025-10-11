@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -27,6 +27,7 @@ import ErrorMessage from '@/components/ErrorMessage';
 const ViewDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -41,17 +42,29 @@ const ViewDetails = () => {
       setLoading(true);
       setError(null);
 
+      // Try to get message from location state first (passed from Inbox)
+      if (location.state?.message) {
+        console.log('✅ Got message from location.state:', location.state.message);
+        setSelectedMessage(location.state.message);
+        setLoading(false);
+        return;
+      }
+
+      // Fallback: Fetch from API if no state
+      console.log('📡 Fetching message from API, ID:', id);
       const messagesData = await getAllMessages({ max_per_source: 100 });
       const transformed = transformMessages(messagesData.normalized || []);
       
       const message = transformed.find(m => m.id === id);
       
       if (!message) {
+        console.error('❌ Message not found, ID:', id);
         setError({ message: 'Message not found' });
         setLoading(false);
         return;
       }
 
+      console.log('✅ Found message:', message);
       setSelectedMessage(message);
       setLoading(false);
       
@@ -59,7 +72,7 @@ const ViewDetails = () => {
       // fetchAIInsights(id);
       
     } catch (err) {
-      console.error('Error fetching message:', err);
+      console.error('❌ Error fetching message:', err);
       setError(err);
       setLoading(false);
     }

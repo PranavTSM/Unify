@@ -13,11 +13,12 @@ import {
   Calendar as CalendarIcon,
   RefreshCw
 } from 'lucide-react';
-import { getCalendarEvents } from '@/services/calendar';
+import { getCalendarEvents, createEvent, deleteEvent } from '@/services/calendar';
 import { transformEvents } from '@/utils/dataTransform';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ErrorMessage from '@/components/ErrorMessage';
 import EmptyState from '@/components/EmptyState';
+import CreateEventModal from '@/components/CreateEventModal';
 
 const Calendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -26,6 +27,8 @@ const Calendar = () => {
   const [error, setError] = useState(null);
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedDateForEvent, setSelectedDateForEvent] = useState(null);
 
   // Fetch calendar events
   const fetchEvents = async (showLoader = true) => {
@@ -61,6 +64,49 @@ const Calendar = () => {
     setRefreshing(true);
     await fetchEvents(false);
     setRefreshing(false);
+  };
+
+  const handleCreateEvent = async (eventData) => {
+    try {
+      console.log('Creating event:', eventData);
+      await createEvent(eventData);
+      console.log('✅ Event created successfully');
+      
+      // Refresh events
+      await fetchEvents(false);
+      
+      alert('Event created successfully!');
+    } catch (err) {
+      console.error('Error creating event:', err);
+      alert('Failed to create event. Please try again.');
+      throw err;
+    }
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    if (!confirm('Are you sure you want to delete this event?')) {
+      return;
+    }
+
+    try {
+      await deleteEvent(eventId);
+      console.log('✅ Event deleted successfully');
+      
+      // Refresh events
+      await fetchEvents(false);
+      
+      alert('Event deleted successfully!');
+    } catch (err) {
+      console.error('Error deleting event:', err);
+      alert('Failed to delete event. Please try again.');
+    }
+  };
+
+  const handleDayClick = (day) => {
+    const clickedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    setSelectedDate(clickedDate);
+    setSelectedDateForEvent(clickedDate);
+    setIsCreateModalOpen(true);
   };
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -128,10 +174,11 @@ const Calendar = () => {
     days.push(
       <div
         key={day}
-        onClick={() => setSelectedDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day))}
+        onClick={() => handleDayClick(day)}
         className={`h-24 p-2 border border-gray-200 cursor-pointer transition-colors ${
-          isSelected ? 'bg-primary/10 border-primary' : 'hover:bg-gray-50'
+          isSelected ? 'bg-primary/10 border-primary' : 'hover:bg-gray-50 hover:border-blue-300'
         }`}
+        title="Click to create event"
       >
         <div className={`text-sm font-semibold mb-1 ${
           isTodayDate ? 'bg-primary text-white w-6 h-6 flex items-center justify-center rounded-full' : 'text-gray-900'
@@ -186,7 +233,7 @@ const Calendar = () => {
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
-          <Button>
+          <Button onClick={() => setIsCreateModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             New Event
           </Button>
@@ -354,6 +401,14 @@ const Calendar = () => {
           </Card>
         </div>
       </div>
+
+      {/* Create Event Modal */}
+      <CreateEventModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateEvent}
+        selectedDate={selectedDateForEvent}
+      />
     </div>
   );
 };
