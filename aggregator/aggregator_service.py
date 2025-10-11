@@ -1,11 +1,11 @@
 """
 Aggregator Service - Main service that fetches, normalizes, and aggregates data
 """
- 
+
 import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
- 
+
 from fetchers import UnifiedAggregator
 from utils.normalizer import (
     normalize_gmail_message,
@@ -16,9 +16,15 @@ from utils.normalizer import (
 from utils.scoring import calculate_importance_score
 from utils.merger import merge_unified_inbox, merge_calendar_events
 from utils.cache import get_cache
- 
+from db.repository import MessageRepository, EventRepository, FetchLogRepository
+
 logger = logging.getLogger(__name__)
 cache = get_cache()
+
+# Initialize MongoDB repositories
+message_repo = MessageRepository()
+event_repo = EventRepository()
+fetch_log_repo = FetchLogRepository()
  
  
 class AggregatorService:
@@ -30,13 +36,13 @@ class AggregatorService:
         self.aggregator = UnifiedAggregator(mcp_base_url)
         logger.info(f"Aggregator service initialized with MCP URL: {mcp_base_url}")
    
-    def aggregate_messages(self, max_per_source: int = 50,
+    def aggregate_messages(self, max_per_source: int = 20,
                           include_raw: bool = False) -> Dict[str, Any]:
         """
         Aggregate messages from all sources (Gmail, Outlook, Teams).
        
         Args:
-            max_per_source: Maximum messages to fetch per source
+            max_per_source: Maximum messages to fetch per source (default: 20)
             include_raw: Whether to include raw message data in response
            
         Returns:
@@ -115,6 +121,13 @@ class AggregatorService:
             "by_source": normalized_by_source,
             "summary": summary
         }
+        
+        # Save to MongoDB for persistence and pagination
+        try:
+            saved_count = message_repo.save_messages(normalized_messages)
+            logger.info(f"💾 MongoDB: Saved {saved_count} messages")
+        except Exception as e:
+            logger.warning(f"MongoDB save failed (continuing anyway): {e}")
         
         # Cache result
         cache.set(cache_key, result, ttl_seconds=30)
@@ -195,16 +208,28 @@ class AggregatorService:
             "summary": summary
         }
         
+        # Save to MongoDB
+        try:
+            saved_count = event_repo.save_events(normalized_events)
+            logger.info(f"💾 MongoDB: Saved {saved_count} events")
+        except Exception as e:
+            logger.warning(f"MongoDB save failed (continuing anyway): {e}")
+        
         # Cache result
         cache.set(cache_key, result, ttl_seconds=60)
         
         return result
    
-    def aggregate_all(self, max_messages_per_source: int = 50,
+    def aggregate_all(self, max_messages_per_source: int = 20,
                      days_ahead: int = 7,
                      include_raw: bool = False) -> Dict[str, Any]:
         """
         Aggregate both messages and events from all sources.
+       
+        Args:
+            max_messages_per_source: Maximum messages per source (default: 20)
+            days_ahead: Days ahead for calendar events
+            include_raw: Include raw data
        
         Returns:
             Dictionary containing both messages and events aggregations
@@ -279,13 +304,13 @@ class AggregatorService:
  
 # Convenience function for quick access
 def fetch_and_normalize_all(mcp_url: str = "http://localhost:8000",
-                            max_per_source: int = 50) -> Dict[str, Any]:
+                            max_per_source: int = 20) -> Dict[str, Any]:
     """
     Convenience function to fetch and normalize all data.
    
     Args:
         mcp_url: MCP server base URL
-        max_per_source: Maximum items per source
+        max_per_source: Maximum items per source (default: 20)
        
     Returns:
         Aggregated and normalized data

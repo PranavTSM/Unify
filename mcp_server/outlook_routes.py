@@ -78,7 +78,7 @@ class MoveMessageRequest(BaseModel):
 
 def list_messages(
     folder: str = "inbox",
-    max_results: int = 50,
+    max_results: int = 20,
     filter_query: Optional[str] = None,
     search: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
@@ -358,7 +358,7 @@ def list_folders() -> Optional[Dict[str, Any]]:
 )
 def outlook_list_messages_endpoint(
     folder: str = Query("inbox", description="Folder name (inbox, sentitems, drafts, deleteditems)"),
-    max_results: int = Query(50, ge=1, le=1000, description="Maximum number of messages"),
+    max_results: int = Query(20, ge=1, le=1000, description="Maximum number of messages"),
     filter_query: Optional[str] = Query(None, description="OData filter query"),
     search: Optional[str] = Query(None, description="Search query")
 ):

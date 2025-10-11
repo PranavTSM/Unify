@@ -43,7 +43,7 @@ const Inbox = () => {
 
       console.log('📡 Inbox: Calling getAllMessages instead of getUnifiedInbox...');
       // Use getAllMessages to get ALL messages (not just priority/unread)
-      const messagesData = await getAllMessages({ max_per_source: 50 });
+      const messagesData = await getAllMessages({ max_per_source: 20 });
       console.log('✅ Inbox: Got all messages:', messagesData);
 
       // Get all normalized messages

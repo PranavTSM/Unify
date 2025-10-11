@@ -25,3 +25,4 @@ langchain-openai>=0.0.5
 langchain-community>=0.0.19
 openai>=1.10.0
 tiktoken>=0.5.2
+pymongo[srv]

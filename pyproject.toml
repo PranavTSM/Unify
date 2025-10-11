@@ -8,7 +8,7 @@ dependencies = [
     # Core web framework
     "fastapi==0.112.2",
     "uvicorn==0.30.6",
-    "pydantic[email]==2.8.2",
+    "pydantic[email]>=2.8.0",
     # Google API integration
     "google-api-core==2.19.2",
     "google-api-python-client==2.131.0",
@@ -28,4 +28,5 @@ dependencies = [
     "langchain-community>=0.0.19",
     "openai>=1.10.0",
     "tiktoken>=0.5.2",
+    "pymongo[srv]>=4.15.3",
 ]

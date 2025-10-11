@@ -52,7 +52,7 @@ export const getUnifiedInbox = async (params = {}) => {
  */
 export const getAllMessages = async (params = {}) => {
   const {
-    max_per_source = 50,
+    max_per_source = 20,
     include_raw = false,
     min_score = null
   } = params;

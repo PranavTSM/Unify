@@ -17,12 +17,18 @@ from llm_client import LLMServiceClient
 from pydantic import BaseModel
 from actions import MessageActionService, snooze_message, get_snoozed_messages, get_due_snoozed_messages, unsnooze_message
 from datetime import datetime, timedelta
- 
+from db.mongo_client import init_mongo, mongo_health_check
+from db.repository import MessageRepository, EventRepository
+
 load_dotenv()
- 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
- 
+
+# Initialize MongoDB
+logger.info("Initializing MongoDB connection...")
+init_mongo()
+
 # Initialize services
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8000")
 LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", "http://localhost:8002")
@@ -30,6 +36,10 @@ LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", "http://localhost:8002")
 aggregator_service = AggregatorService(mcp_base_url=MCP_SERVER_URL)
 llm_client = LLMServiceClient(base_url=LLM_SERVICE_URL)
 action_service = MessageActionService(mcp_base_url=MCP_SERVER_URL)
+
+# Initialize repositories
+message_repo = MessageRepository()
+event_repo = EventRepository()
  
 app = FastAPI(
     title="Unified Inbox Aggregator",
@@ -57,6 +67,7 @@ app.add_middleware(
 def health_check():
     """Health check endpoint with dependency status."""
     llm_healthy = llm_client.health_check()
+    mongo_healthy = mongo_health_check()
     
     return {
         "status": "ok",
@@ -66,6 +77,10 @@ def health_check():
             "llm_service": {
                 "url": LLM_SERVICE_URL,
                 "healthy": llm_healthy
+            },
+            "mongodb": {
+                "healthy": mongo_healthy,
+                "enabled": mongo_healthy
             }
         }
     }
@@ -151,7 +166,7 @@ async def get_unified_calendar(
  
 @app.get("/unified/messages")
 async def get_all_messages(
-    max_per_source: int = Query(default=50, ge=1, le=100),
+    max_per_source: int = Query(default=20, ge=1, le=100),
     include_raw: bool = Query(default=False),
     min_score: Optional[float] = Query(default=None, ge=0.0, le=1.0)
 ):
@@ -159,7 +174,7 @@ async def get_all_messages(
     Fetch all messages from all sources with normalization and scoring.
    
     Args:
-        max_per_source: Maximum messages per source
+        max_per_source: Maximum messages per source (default: 20)
         include_raw: Include raw API responses
         min_score: Filter by minimum importance score
    
@@ -188,7 +203,7 @@ async def get_all_messages(
  
 @app.get("/unified/all")
 async def get_all_data(
-    max_messages_per_source: int = Query(default=50, ge=1, le=100),
+    max_messages_per_source: int = Query(default=20, ge=1, le=100),
     days_ahead: int = Query(default=7, ge=1, le=30),
     include_raw: bool = Query(default=False)
 ):
@@ -196,7 +211,7 @@ async def get_all_data(
     Fetch everything - all messages and calendar events from all sources.
    
     Args:
-        max_messages_per_source: Maximum messages per source
+        max_messages_per_source: Maximum messages per source (default: 20)
         days_ahead: Days ahead for calendar events
         include_raw: Include raw API responses
    
@@ -628,7 +643,7 @@ async def unsnooze(message_id: str):
 async def search_messages(
     query: str = Query(..., min_length=1),
     sources: Optional[List[str]] = Query(None),
-    max_results: int = Query(50, ge=1, le=200)
+    max_results: int = Query(20, ge=1, le=200)
 ):
     """
     Advanced search across all messages.
@@ -710,6 +725,166 @@ async def get_analytics():
     
     except Exception as e:
         logger.error(f"Error getting analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== MONGODB PAGINATION ENDPOINTS ====================
+
+@app.get("/messages/paginated")
+async def get_messages_paginated(
+    page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
+    source: Optional[str] = Query(default=None, description="Filter by source (gmail, outlook, teams)"),
+    is_read: Optional[bool] = Query(default=None, description="Filter by read status"),
+    min_score: Optional[float] = Query(default=None, ge=0.0, le=1.0, description="Minimum importance score"),
+    search: Optional[str] = Query(default=None, description="Search in subject/body/sender")
+):
+    """
+    Get messages with pagination from MongoDB.
+    Fast and efficient for large datasets.
+    
+    Features:
+    - Pagination support
+    - Filtering by source, read status, importance
+    - Full-text search
+    - Returns total count and page info
+    
+    Args:
+        page: Page number (starts at 1)
+        page_size: Number of items per page
+        source: Filter by source (gmail/outlook/teams)
+        is_read: Filter by read status
+        min_score: Minimum importance score filter
+        search: Search query for subject/body/sender
+        
+    Returns:
+        Paginated messages with metadata
+    """
+    try:
+        logger.info(f"📖 Paginated query: page={page}, size={page_size}, source={source}")
+        
+        result = message_repo.get_messages(
+            page=page,
+            page_size=page_size,
+            source=source,
+            is_read=is_read,
+            min_score=min_score,
+            search_query=search
+        )
+        
+        return {
+            "status": "success",
+            "data": result["messages"],
+            "pagination": {
+                "page": result["page"],
+                "page_size": result["page_size"],
+                "total_count": result["total_count"],
+                "total_pages": result["total_pages"],
+                "has_next": result.get("has_next", False),
+                "has_prev": result.get("has_prev", False)
+            },
+            "filters": {
+                "source": source,
+                "is_read": is_read,
+                "min_score": min_score,
+                "search": search
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in paginated messages: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/messages/{message_id}")
+async def get_message_by_id(message_id: str):
+    """
+    Get a single message by ID from MongoDB.
+    
+    Args:
+        message_id: Unique message identifier
+        
+    Returns:
+        Message details
+    """
+    try:
+        message = message_repo.get_message_by_id(message_id)
+        
+        if not message:
+            raise HTTPException(status_code=404, detail=f"Message {message_id} not found")
+        
+        return {
+            "status": "success",
+            "data": message
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving message {message_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/events/paginated")
+async def get_events_paginated(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    source: Optional[str] = Query(default=None, description="Filter by source"),
+    start_after: Optional[str] = Query(default=None, description="Only events starting after this date (ISO)")
+):
+    """
+    Get calendar events with pagination from MongoDB.
+    
+    Args:
+        page: Page number
+        page_size: Items per page
+        source: Filter by source (google_calendar, microsoft_calendar)
+        start_after: Only events after this date
+        
+    Returns:
+        Paginated events
+    """
+    try:
+        result = event_repo.get_events(
+            page=page,
+            page_size=page_size,
+            source=source,
+            start_after=start_after
+        )
+        
+        return {
+            "status": "success",
+            "data": result["events"],
+            "pagination": {
+                "page": result["page"],
+                "page_size": result["page_size"],
+                "total_count": result["total_count"],
+                "total_pages": result["total_pages"]
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in paginated events: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/statistics/mongodb")
+async def get_mongodb_statistics():
+    """
+    Get statistics from MongoDB storage.
+    Shows total messages, breakdown by source, read status, etc.
+    """
+    try:
+        stats = message_repo.get_statistics()
+        
+        return {
+            "status": "success",
+            "statistics": stats,
+            "mongodb_enabled": mongo_health_check()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting MongoDB statistics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

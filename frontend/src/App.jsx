@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Inbox from './pages/Inbox';
 import ViewDetails from './pages/ViewDetails';
 import Calendar from './pages/Calendar';
+import Analytics from './pages/Analytics';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="/details" element={<ViewDetails />} />
           <Route path="/details/:id" element={<ViewDetails />} />
           <Route path="/calendar" element={<Calendar />} />
+          <Route path="/analytics" element={<Analytics />} />
         </Routes>
       </Layout>
     </Router>
