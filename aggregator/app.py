@@ -15,6 +15,8 @@ from aggregator_service import AggregatorService, fetch_and_normalize_all
 from utils.scoring import score_and_rank_messages, filter_by_importance
 from llm_client import LLMServiceClient
 from pydantic import BaseModel
+from actions import MessageActionService, snooze_message, get_snoozed_messages, get_due_snoozed_messages, unsnooze_message
+from datetime import datetime, timedelta
  
 load_dotenv()
  
@@ -27,6 +29,7 @@ LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", "http://localhost:8002")
 
 aggregator_service = AggregatorService(mcp_base_url=MCP_SERVER_URL)
 llm_client = LLMServiceClient(base_url=LLM_SERVICE_URL)
+action_service = MessageActionService(mcp_base_url=MCP_SERVER_URL)
  
 app = FastAPI(
     title="Unified Inbox Aggregator",
@@ -492,7 +495,224 @@ async def extract_actions_from_messages(request: ExtractActionsRequest):
             status_code=500,
             detail=f"Failed to extract actions: {str(e)}"
         )
- 
+
+
+# ==================== MESSAGE ACTIONS ====================
+
+class MessageActionRequest(BaseModel):
+    message_id: str
+    source: str  # 'gmail', 'outlook', 'teams'
+    action: str  # 'mark_read', 'mark_unread', 'star', 'unstar', 'archive', 'delete'
+
+
+class BulkActionRequest(BaseModel):
+    message_ids: List[str]
+    source: str
+    action: str
+
+
+class SnoozeRequest(BaseModel):
+    message_id: str
+    snooze_until: Optional[str] = None  # ISO datetime
+    snooze_minutes: Optional[int] = None  # Alternative: snooze for N minutes
+
+
+@app.post("/messages/action")
+async def perform_message_action(request: MessageActionRequest):
+    """Perform action on a single message (mark read, star, archive, delete)."""
+    try:
+        success = False
+        
+        if request.action == "mark_read":
+            success = action_service.mark_as_read(request.message_id, request.source)
+        elif request.action == "mark_unread":
+            success = action_service.mark_as_unread(request.message_id, request.source)
+        elif request.action == "star":
+            success = action_service.star_message(request.message_id, request.source, True)
+        elif request.action == "unstar":
+            success = action_service.star_message(request.message_id, request.source, False)
+        elif request.action == "archive":
+            success = action_service.archive_message(request.message_id, request.source)
+        elif request.action == "delete":
+            success = action_service.delete_message(request.message_id, request.source)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown action: {request.action}")
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Action failed")
+        
+        return {"success": True, "message_id": request.message_id, "action": request.action}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error performing action: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/messages/bulk-action")
+async def perform_bulk_action(request: BulkActionRequest):
+    """Perform action on multiple messages at once."""
+    try:
+        results = action_service.bulk_action(request.message_ids, request.action, request.source)
+        return {
+            "success": True,
+            "results": results
+        }
+    except Exception as e:
+        logger.error(f"Error performing bulk action: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/messages/snooze")
+async def snooze_message_endpoint(request: SnoozeRequest):
+    """Snooze a message until a specific time."""
+    try:
+        if request.snooze_until:
+            until = datetime.fromisoformat(request.snooze_until.replace('Z', '+00:00'))
+        elif request.snooze_minutes:
+            until = datetime.utcnow() + timedelta(minutes=request.snooze_minutes)
+        else:
+            # Default: 1 hour
+            until = datetime.utcnow() + timedelta(hours=1)
+        
+        snooze_message(request.message_id, until)
+        
+        return {
+            "success": True,
+            "message_id": request.message_id,
+            "snoozed_until": until.isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error snoozing message: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/messages/snoozed")
+async def get_snoozed():
+    """Get all snoozed messages."""
+    try:
+        snoozed = get_snoozed_messages()
+        due = get_due_snoozed_messages()
+        
+        return {
+            "snoozed": snoozed,
+            "due_now": due,
+            "total_snoozed": len(snoozed),
+            "total_due": len(due)
+        }
+    except Exception as e:
+        logger.error(f"Error getting snoozed messages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/messages/snooze/{message_id}")
+async def unsnooze(message_id: str):
+    """Remove snooze from a message."""
+    try:
+        success = unsnooze_message(message_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Message not snoozed")
+        
+        return {"success": True, "message_id": message_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error unsnoozing message: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== SEARCH & ANALYTICS ====================
+
+@app.get("/search")
+async def search_messages(
+    query: str = Query(..., min_length=1),
+    sources: Optional[List[str]] = Query(None),
+    max_results: int = Query(50, ge=1, le=200)
+):
+    """
+    Advanced search across all messages.
+    Searches in subject, body, sender, and uses smart filtering.
+    """
+    try:
+        # Fetch all messages
+        result = aggregator_service.aggregate_messages(max_per_source=100, include_raw=False)
+        messages = result.get("normalized", [])
+        
+        query_lower = query.lower()
+        matched = []
+        
+        for msg in messages:
+            # Filter by source if specified
+            if sources and msg.get("category") not in sources:
+                continue
+            
+            # Search in multiple fields (ensure all are strings)
+            searchable_text = " ".join([
+                str(msg.get("subject", "")),
+                str(msg.get("body_preview", "")),
+                str(msg.get("sender", "")),
+                str(msg.get("category", ""))
+            ]).lower()
+            
+            if query_lower in searchable_text:
+                matched.append(msg)
+        
+        # Limit results
+        matched = matched[:max_results]
+        
+        return {
+            "query": query,
+            "total_results": len(matched),
+            "messages": matched
+        }
+    
+    except Exception as e:
+        logger.error(f"Error searching messages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analytics/stats")
+async def get_analytics():
+    """Get inbox analytics and statistics."""
+    try:
+        result = aggregator_service.aggregate_messages(max_per_source=100, include_raw=False)
+        messages = result.get("normalized", [])
+        
+        # Calculate stats
+        total = len(messages)
+        by_source = {}
+        by_priority = {"high": 0, "medium": 0, "low": 0}
+        unread_count = 0
+        
+        for msg in messages:
+            source = msg.get("category", "unknown")
+            by_source[source] = by_source.get(source, 0) + 1
+            
+            score = msg.get("importance_score", 0.5)
+            if score >= 0.75:
+                by_priority["high"] += 1
+            elif score >= 0.5:
+                by_priority["medium"] += 1
+            else:
+                by_priority["low"] += 1
+            
+            if not msg.get("is_read", True):
+                unread_count += 1
+        
+        return {
+            "total_messages": total,
+            "unread_count": unread_count,
+            "by_source": by_source,
+            "by_priority": by_priority,
+            "read_percentage": ((total - unread_count) / total * 100) if total > 0 else 0
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8001)

@@ -15,8 +15,10 @@ from utils.normalizer import (
 )
 from utils.scoring import calculate_importance_score
 from utils.merger import merge_unified_inbox, merge_calendar_events
+from utils.cache import get_cache
  
 logger = logging.getLogger(__name__)
+cache = get_cache()
  
  
 class AggregatorService:
@@ -43,6 +45,13 @@ class AggregatorService:
             - by_source: Messages grouped by source
             - summary: Aggregation summary
         """
+        # Check cache first
+        cache_key = f"messages_{max_per_source}_{include_raw}"
+        cached = cache.get(cache_key)
+        if cached:
+            logger.info(f"Returning cached messages (max_per_source={max_per_source})")
+            return cached
+        
         logger.info(f"Starting message aggregation (max_per_source={max_per_source})")
        
         # Fetch raw messages
@@ -101,11 +110,16 @@ class AggregatorService:
        
         logger.info(f"Aggregation complete: {summary['total_messages']} total messages")
        
-        return {
+        result = {
             "normalized": normalized_messages,
             "by_source": normalized_by_source,
             "summary": summary
         }
+        
+        # Cache result
+        cache.set(cache_key, result, ttl_seconds=30)
+        
+        return result
    
     def aggregate_events(self, days_ahead: int = 7,
                         include_raw: bool = False) -> Dict[str, Any]:
@@ -122,6 +136,13 @@ class AggregatorService:
             - by_source: Events grouped by source
             - summary: Aggregation summary
         """
+        # Check cache first
+        cache_key = f"events_{days_ahead}_{include_raw}"
+        cached = cache.get(cache_key)
+        if cached:
+            logger.info(f"Returning cached events (days_ahead={days_ahead})")
+            return cached
+        
         logger.info(f"Starting event aggregation (days_ahead={days_ahead})")
        
         # Fetch raw events
@@ -168,11 +189,16 @@ class AggregatorService:
        
         logger.info(f"Event aggregation complete: {summary['total_events']} total events")
        
-        return {
+        result = {
             "normalized": normalized_events,
             "by_source": normalized_by_source,
             "summary": summary
         }
+        
+        # Cache result
+        cache.set(cache_key, result, ttl_seconds=60)
+        
+        return result
    
     def aggregate_all(self, max_messages_per_source: int = 50,
                      days_ahead: int = 7,

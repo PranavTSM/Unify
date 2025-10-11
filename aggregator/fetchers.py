@@ -115,10 +115,57 @@ class TeamsFetcher(MCPFetcher):
        
         data = self._get(endpoint, params=params)
         if data and isinstance(data, list):
-            logger.info(f"Fetched {len(data)} Teams messages")
+            logger.info(f"Fetched {len(data)} Teams channel messages")
             return data
         elif data and "value" in data:
-            logger.info(f"Fetched {len(data['value'])} Teams messages")
+            logger.info(f"Fetched {len(data['value'])} Teams channel messages")
+            return data["value"]
+        return []
+    
+    def fetch_chats(self, max_results: int = 50) -> List[Dict[str, Any]]:
+        """
+        Fetch Teams 1:1 chats.
+        
+        Args:
+            max_results: Maximum number of chats to fetch
+            
+        Returns:
+            List of raw Teams chat objects
+        """
+        endpoint = "/teams/chats"
+        params = {"max_results": max_results}
+        
+        data = self._get(endpoint, params=params)
+        if data and "value" in data:
+            logger.info(f"Fetched {len(data['value'])} Teams chats")
+            return data["value"]
+        return []
+    
+    def fetch_chat_messages(self, chat_id: str, max_results: int = 50) -> List[Dict[str, Any]]:
+        """
+        Fetch messages from a specific chat.
+        
+        Args:
+            chat_id: Chat ID
+            max_results: Maximum number of messages
+            
+        Returns:
+            List of chat messages
+        """
+        endpoint = f"/teams/chats/{chat_id}/messages"
+        params = {"max_results": max_results}
+        
+        data = self._get(endpoint, params=params)
+        if data and "value" in data:
+            logger.info(f"Fetched {len(data['value'])} messages from chat {chat_id}")
+            return data["value"]
+        return []
+    
+    def fetch_all_joined_teams(self) -> List[Dict[str, Any]]:
+        """Fetch all teams the user has joined."""
+        data = self._get("/teams/joined")
+        if data and "value" in data:
+            logger.info(f"Fetched {len(data['value'])} joined teams")
             return data["value"]
         return []
    
@@ -140,6 +187,73 @@ class TeamsFetcher(MCPFetcher):
         if data and "value" in data:
             return data["value"]
         return []
+    
+    def fetch_all_teams_messages(self, max_per_team: int = 20) -> List[Dict[str, Any]]:
+        """
+        Optimized: Fetch messages from all joined teams and channels.
+        Prevents over-fetching with smart limits.
+        
+        Args:
+            max_per_team: Maximum messages per team/channel
+            
+        Returns:
+            Combined list of all Teams messages (deduplicated)
+        """
+        all_messages = []
+        seen_ids = set()  # Prevent duplicates
+        
+        try:
+            # Fetch 1:1 chats first (higher priority)
+            try:
+                chats = self.fetch_chats(max_results=5)  # Reduced from 10
+                for chat in chats[:5]:
+                    chat_id = chat.get('id')
+                    if chat_id:
+                        try:
+                            chat_messages = self.fetch_chat_messages(chat_id, max_results=10)  # Reduced from 20
+                            for msg in chat_messages:
+                                msg_id = msg.get('id')
+                                if msg_id and msg_id not in seen_ids:
+                                    seen_ids.add(msg_id)
+                                    all_messages.append(msg)
+                        except Exception as e:
+                            logger.warning(f"Error fetching chat {chat_id}: {e}")
+            except Exception as e:
+                logger.warning(f"Error fetching chats: {e}")
+            
+            # Then fetch team channels (limit total to prevent timeout)
+            teams = self.fetch_all_joined_teams()
+            logger.info(f"Fetching from {min(len(teams), 3)} teams")  # Reduced from 5
+            
+            for team in teams[:3]:  # Reduced from 5
+                team_id = team.get('id')
+                if not team_id:
+                    continue
+                
+                channels = self.fetch_channels(team_id)
+                
+                for channel in channels[:2]:  # Reduced from 3
+                    channel_id = channel.get('id')
+                    if not channel_id:
+                        continue
+                    
+                    try:
+                        messages = self.fetch_messages(team_id, channel_id, 10)  # Reduced per channel
+                        for msg in messages:
+                            msg_id = msg.get('id')
+                            if msg_id and msg_id not in seen_ids:
+                                seen_ids.add(msg_id)
+                                all_messages.append(msg)
+                    except Exception as e:
+                        logger.warning(f"Error fetching from team {team_id}, channel {channel_id}: {e}")
+                        continue
+            
+            logger.info(f"Fetched {len(all_messages)} unique Teams messages")
+            return all_messages
+            
+        except Exception as e:
+            logger.error(f"Error in fetch_all_teams_messages: {e}")
+            return []
  
  
 class CalendarFetcher(MCPFetcher):
@@ -235,9 +349,9 @@ class UnifiedAggregator:
         except Exception as e:
             logger.error(f"Error fetching Outlook: {e}")
        
-        # Fetch Teams
+        # Fetch Teams (all joined teams + channels + chats)
         try:
-            results["teams"] = self.teams_fetcher.fetch_messages(max_results=max_per_source)
+            results["teams"] = self.teams_fetcher.fetch_all_teams_messages(max_per_team=max_per_source)
         except Exception as e:
             logger.error(f"Error fetching Teams: {e}")
        

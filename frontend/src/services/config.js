@@ -18,9 +18,9 @@ export const API_CONFIG = {
 
 // Request timeouts (milliseconds)
 export const TIMEOUTS = {
-  DEFAULT: 30000,    // 30 seconds
-  AI_FEATURES: 60000, // 60 seconds for AI operations
-  UPLOAD: 120000,    // 2 minutes for file uploads
+  DEFAULT: 60000,     // 60 seconds (increased to prevent timeouts)
+  AI_FEATURES: 120000, // 2 minutes for AI operations
+  UPLOAD: 180000,     // 3 minutes for file uploads
 };
 
 // Polling intervals (milliseconds)

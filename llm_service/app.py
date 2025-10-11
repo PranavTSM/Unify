@@ -21,9 +21,15 @@ from fastapi.middleware.cors import CORSMiddleware
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
-from llm_service.summarizer import generate_summary
-from llm_service.action_extractor import extract_action_items
-from llm_service.memory.retriever import get_unified_retriever
+try:
+    from llm_service.summarizer import generate_summary
+    from llm_service.action_extractor import extract_action_items
+    from llm_service.memory.retriever import get_unified_retriever
+except ModuleNotFoundError:
+    # Running from llm_service directory
+    from summarizer import generate_summary
+    from action_extractor import extract_action_items
+    from memory.retriever import get_unified_retriever
 try:
     from llm_service.utils.scoring import heuristic_priority_score, label_from_score
 except Exception:

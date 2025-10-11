@@ -113,40 +113,67 @@ const ViewDetails = () => {
     );
   }
 
-  // Calculate priority level from importance score
+  // Calculate priority level from importance score and context
   const getPriorityLevel = (score) => {
-    if (score >= 0.75) return { label: 'High', color: 'text-red-600', bgColor: 'bg-red-50' };
-    if (score >= 0.5) return { label: 'Medium', color: 'text-yellow-600', bgColor: 'bg-yellow-50' };
-    return { label: 'Low', color: 'text-green-600', bgColor: 'bg-green-50' };
+    if (score >= 0.75) return { 
+      label: 'High Priority', 
+      color: 'text-red-600', 
+      bgColor: 'bg-red-50',
+      borderColor: 'border-red-200'
+    };
+    if (score >= 0.5) return { 
+      label: 'Medium Priority', 
+      color: 'text-yellow-600', 
+      bgColor: 'bg-yellow-50',
+      borderColor: 'border-yellow-200'
+    };
+    return { 
+      label: 'Low Priority', 
+      color: 'text-blue-600', 
+      bgColor: 'bg-blue-50',
+      borderColor: 'border-blue-200'
+    };
   };
 
   const priority = getPriorityLevel(selectedMessage.importance_score || 0.5);
+  
+  // Determine context type from source
+  const getContextType = (source) => {
+    if (source?.toLowerCase().includes('teams')) return 'Teams Chat';
+    if (source?.toLowerCase().includes('outlook')) return 'Outlook Email';
+    if (source?.toLowerCase().includes('gmail')) return 'Gmail Email';
+    return 'Message';
+  };
 
   const insights = [
     {
       title: 'Priority Level',
       value: priority.label,
+      description: `Score: ${((selectedMessage.importance_score || 0.5) * 100).toFixed(0)}%`,
       icon: TrendingUp,
       color: priority.color,
       bgColor: priority.bgColor
     },
     {
-      title: 'Action Required',
-      value: aiInsights?.actions?.length > 0 ? 'Yes' : 'No',
-      icon: CheckCircle2,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50'
-    },
-    {
-      title: 'Source',
-      value: selectedMessage.category,
+      title: 'Message Type',
+      value: getContextType(selectedMessage.category),
+      description: selectedMessage.category || 'Unknown',
       icon: Brain,
       color: 'text-purple-600',
       bgColor: 'bg-purple-50'
     },
     {
+      title: 'Action Required',
+      value: aiInsights?.actions?.length > 0 ? `${aiInsights.actions.length} Actions` : 'None',
+      description: aiInsights ? 'AI Analyzed' : 'Not analyzed',
+      icon: CheckCircle2,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-50'
+    },
+    {
       title: 'Attachments',
       value: selectedMessage.attachments?.length || 0,
+      description: selectedMessage.attachments?.length > 0 ? 'Has files' : 'No files',
       icon: BarChart3,
       color: 'text-green-600',
       bgColor: 'bg-green-50'
@@ -399,13 +426,16 @@ const ViewDetails = () => {
                   return (
                     <div 
                       key={index}
-                      className={`p-4 rounded-lg ${insight.bgColor}`}
+                      className={`p-4 rounded-lg ${insight.bgColor} border-2 ${insight.borderColor || 'border-transparent'}`}
                     >
-                      <div className="flex items-center space-x-3">
-                        <Icon className={`w-5 h-5 ${insight.color}`} />
-                        <div>
-                          <p className="text-xs text-gray-600 font-medium">{insight.title}</p>
+                      <div className="flex items-start space-x-3">
+                        <Icon className={`w-5 h-5 ${insight.color} mt-1`} />
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-600 font-medium mb-1">{insight.title}</p>
                           <p className={`text-lg font-bold ${insight.color}`}>{insight.value}</p>
+                          {insight.description && (
+                            <p className="text-xs text-gray-500 mt-1">{insight.description}</p>
+                          )}
                         </div>
                       </div>
                     </div>
