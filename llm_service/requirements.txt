@@ -4,16 +4,15 @@ pydantic==2.8.2
 python-dotenv==1.0.1
 
 # Memory System Dependencies
-qdrant-client==1.7.0
-redis==5.0.1
+qdrant-client>=1.7.0
+redis>=5.0.1
 
 # LangChain for embeddings and LLM integration
-langchain==0.1.6
-langchain-openai==0.0.5
-langchain-community==0.0.19
+langchain>=0.1.6
+langchain-openai>=0.0.5
+langchain-community>=0.0.19
 openai>=1.10.0
 
 # Additional utilities
-httpx==0.25.2         # For async HTTP requests
+httpx>=0.25.2         # For async HTTP requests
 tiktoken>=0.5.2       # Token counting for OpenAI
-

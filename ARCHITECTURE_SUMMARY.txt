@@ -1,0 +1,293 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                   UNIFY SYSTEM - ARCHITECTURE SUMMARY                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📊 SYSTEM OVERVIEW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+3 Microservices:
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ 1. MCP SERVER (Port 8000)         - Backend API Gateway                │
+  │ 2. AGGREGATOR (Port 8001)         - Orchestration Layer                │
+  │ 3. LLM SERVICE (Port 8002)        - AI Processing Engine                │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+5 External Services:
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ 1. Google APIs (Gmail, Calendar)  - Email & Calendar data              │
+  │ 2. Microsoft Graph (Outlook,Teams) - Email, Chat, Calendar             │
+  │ 3. OpenAI API (GPT models)        - AI Text Processing                 │
+  │ 4. Qdrant (Port 6333)             - Vector Database                    │
+  │ 5. Redis (Port 6379)              - Cache & Memory                     │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+
+🔗 CONNECTION FLOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+External APIs
+    ↓
+MCP Server (authenticates & fetches)
+    ↓
+Aggregator (normalizes, merges, scores)
+    ↓
+LLM Service (AI processing)
+    ↓
+Qdrant + Redis (memory storage)
+
+
+📋 EACH SERVICE EXPLAINED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1️⃣  MCP SERVER (Port 8000)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Role: Backend API Gateway
+  
+  Connects To:
+    → Google APIs (Gmail, Calendar) via OAuth2
+    → Microsoft Graph (Outlook, Teams) via MSAL
+  
+  What It Does:
+    ✓ Authenticates with external services
+    ✓ Fetches raw Gmail messages
+    ✓ Fetches raw Outlook emails
+    ✓ Fetches raw Teams messages
+    ✓ Fetches calendar events
+    ✓ Returns raw JSON data
+  
+  Key Endpoints:
+    GET /gmail/messages
+    GET /outlook/messages
+    GET /teams/messages
+    GET /calendars/{id}/events
+    GET /health
+  
+  Environment:
+    GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+    MSFT_CLIENT_ID, MSFT_CLIENT_SECRET
+
+
+2️⃣  AGGREGATOR (Port 8001)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Role: Central Orchestration Hub
+  
+  Connects To:
+    → MCP Server (fetches raw data)
+    → LLM Service (requests AI processing)
+  
+  What It Does:
+    ✓ Fetches from all sources via MCP
+    ✓ Normalizes different formats to unified schema
+    ✓ Merges & deduplicates messages (YOUR FIX!)
+    ✓ Calculates importance scores
+    ✓ Detects calendar conflicts
+    ✓ Calls LLM for AI features
+  
+  Key Components:
+    • UnifiedAggregator - Fetches data
+    • Normalizers - Convert formats
+    • Merger - Deduplicate & sort
+    • Scorer - Calculate importance
+    • LLMServiceClient - AI integration
+  
+  Key Endpoints:
+    GET  /unified/inbox             - Aggregated data
+    GET  /unified/calendar          - Calendar events
+    POST /unified/inbox/summarize   - AI summaries ⭐
+    POST /unified/inbox/extract-actions - AI actions ⭐
+  
+  Environment:
+    MCP_SERVER_URL=http://mcp_server:8000
+    LLM_SERVICE_URL=http://llm_service:8002
+
+
+3️⃣  LLM SERVICE (Port 8002)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Role: AI Processing Engine
+  
+  Connects To:
+    → OpenAI API (text processing)
+    → Qdrant (vector storage)
+    → Redis (conversation memory)
+  
+  What It Does:
+    ✓ Summarizes messages (3 modes)
+    ✓ Extracts action items
+    ✓ Generates embeddings
+    ✓ Stores in semantic memory (Qdrant)
+    ✓ Tracks conversations (Redis)
+    ✓ Retrieves context for queries
+  
+  Key Components:
+    • Summarizer - Text summarization
+    • ActionExtractor - Task extraction
+    • EmbeddingsManager - Qdrant interface
+    • RedisMemory - Conversation tracking
+    • UnifiedRetriever - Context retrieval
+  
+  Key Endpoints:
+    POST /summarize-batch    - Batch summarization
+    POST /extract-actions    - Action extraction
+    POST /store              - Store in memory
+    GET  /context            - Retrieve context
+    GET  /memory/status      - Memory health
+  
+  Environment:
+    OPENAI_API_KEY=sk-...
+    QDRANT_URL=http://qdrant:6333
+    REDIS_URL=redis://redis:6379
+
+
+🔄 COMPLETE DATA FLOW EXAMPLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+User Request: "Summarize my inbox"
+  ↓
+1. POST /unified/inbox/summarize → Aggregator
+  ↓
+2. Aggregator checks LLM health
+   GET llm_service:8002/health
+  ↓
+3. Aggregator fetches messages
+   GET mcp_server:8000/gmail/messages
+   GET mcp_server:8000/outlook/messages
+   GET mcp_server:8000/teams/messages
+  ↓
+4. MCP Server calls External APIs
+   → Gmail API: users().messages().list()
+   → Graph API: GET /me/messages
+   → Graph API: GET /teams/messages
+  ↓
+5. MCP returns raw JSON → Aggregator
+  ↓
+6. Aggregator processes:
+   • Normalize formats
+   • Merge & deduplicate (YOUR FIX!)
+   • Calculate scores
+  ↓
+7. Aggregator → LLM Service
+   POST llm_service:8002/summarize-batch
+   {messages: [...]}
+  ↓
+8. LLM Service processes:
+   • Flatten messages to text
+   • Call OpenAI GPT-3.5
+   • Generate summary
+   • Store in Qdrant/Redis (optional)
+  ↓
+9. LLM returns summary → Aggregator
+  ↓
+10. Aggregator formats response
+  ↓
+User receives: AI-powered summary! 🎉
+
+
+✅ WHAT WAS FIXED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Merger Implementation ✅
+   Before: Simple concatenation, duplicates, no sorting
+   After:  Smart deduplication by signature, sorted by timestamp
+
+2. LLM Integration ✅
+   Added: LLMServiceClient, /summarize, /extract-actions endpoints
+
+3. Docker Services ✅
+   Added: Qdrant and Redis to docker-compose.yml
+
+4. Architecture Complete ✅
+   All services properly connected with dependencies
+
+
+🌐 DOCKER NETWORKING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Network: unify_network (bridge mode)
+
+Services communicate via internal DNS:
+  mcp_server:8000    ← Aggregator calls this
+  aggregator:8001    ← User calls this
+  llm_service:8002   ← Aggregator calls this
+  qdrant:6333        ← LLM Service calls this
+  redis:6379         ← LLM Service calls this
+
+Port Mapping (Host:Container):
+  8000:8000  - MCP Server
+  8001:8001  - Aggregator (⭐ Main entry point)
+  8002:8002  - LLM Service
+  6333:6333  - Qdrant API
+  6379:6379  - Redis
+
+
+🎯 VERIFICATION CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Connections:
+  [✓] MCP → Google APIs
+  [✓] MCP → Microsoft Graph
+  [✓] Aggregator → MCP
+  [✓] Aggregator → LLM Service
+  [✓] LLM → OpenAI
+  [✓] LLM → Qdrant
+  [✓] LLM → Redis
+  [✓] All on Docker network
+
+Features:
+  [✓] Fetch emails from Gmail
+  [✓] Fetch emails from Outlook
+  [✓] Fetch messages from Teams
+  [✓] Normalize to unified format
+  [✓] Merge & deduplicate
+  [✓] Calculate importance
+  [✓] AI summarization
+  [✓] AI action extraction
+  [✓] Semantic memory
+  [✓] Conversation tracking
+
+
+🚀 QUICK START
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Setup environment:
+   cp example.env .env
+   # Edit .env with your API keys
+
+2. Start all services:
+   docker-compose up -d
+
+3. Check health:
+   curl http://localhost:8001/health
+
+4. Test summarization:
+   curl -X POST http://localhost:8001/unified/inbox/summarize \
+     -H "Content-Type: application/json" \
+     -d '{"mode": "bullets"}'
+
+5. Test action extraction:
+   curl -X POST http://localhost:8001/unified/inbox/extract-actions \
+     -H "Content-Type: application/json" \
+     -d '{"min_priority": "medium"}'
+
+
+📚 DOCUMENTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ARCHITECTURE_ANALYSIS.md        - Detailed connection analysis
+COMPLETE_SYSTEM_GUIDE.md        - Visual diagrams & flows
+aggregator/API_INTEGRATION_GUIDE.md - API reference
+INTEGRATION_COMPLETE.md         - Implementation summary
+test_integration.py             - Automated test suite
+
+
+🎉 CONCLUSION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Architecture is COMPLETE and CORRECT
+✅ All services properly connected
+✅ Data flows validated
+✅ AI features integrated
+✅ Memory system configured
+✅ Production ready
+
+Your unified inbox system is fully operational! 🚀
+
