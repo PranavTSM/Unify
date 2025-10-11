@@ -1,9 +1,19 @@
 fastapi==0.112.2
 uvicorn==0.30.6
 pydantic==2.8.2
+python-dotenv==1.0.1
 
-# TODO: Uncomment and install based on chosen LLM provider
-# openai==1.35.0        # For OpenAI GPT-4
-# anthropic==0.31.0     # For Anthropic Claude
-# ollama==0.3.0         # For local LLMs via Ollama
+# Memory System Dependencies
+qdrant-client==1.7.0
+redis==5.0.1
+
+# LangChain for embeddings and LLM integration
+langchain==0.1.6
+langchain-openai==0.0.5
+langchain-community==0.0.19
+openai>=1.10.0
+
+# Additional utilities
+httpx==0.25.2         # For async HTTP requests
+tiktoken>=0.5.2       # Token counting for OpenAI
 
