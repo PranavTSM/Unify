@@ -48,7 +48,7 @@ class ModifyLabelsRequest(BaseModel):
 
 # --- Gmail Actions (Business Logic) ---
 
-def list_messages(credentials: Credentials, user_id: str = 'me', query: Optional[str] = None, max_results: int = 50, label_ids: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+def list_messages(credentials: Credentials, user_id: str = 'me', query: Optional[str] = None, max_results: int = 10, label_ids: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
     service = _get_gmail_service(credentials)
     try:
         kwargs: Dict[str, Any] = {"userId": user_id, "maxResults": max_results}
@@ -150,6 +150,59 @@ def modify_message_labels(credentials: Credentials, message_id: str, add_labels:
         logger.error(f"Unexpected error in modify_message_labels: {e}", exc_info=True)
         return None
 
+
+def batch_get_messages(credentials: Credentials, message_ids: List[str], user_id: str = 'me', format: str = 'full') -> List[Dict[str, Any]]:
+    """
+    Batch fetch multiple Gmail messages efficiently.
+    
+    Args:
+        credentials: OAuth2 credentials
+        message_ids: List of message IDs to fetch
+        user_id: Gmail user id (default 'me')
+        format: Message format (full, minimal, raw, metadata)
+    
+    Returns:
+        List of fetched message objects
+    """
+    service = _get_gmail_service(credentials)
+    messages = []
+    
+    try:
+        from googleapiclient.http import BatchHttpRequest
+        
+        def callback(request_id, response, exception):
+            if exception is not None:
+                logger.warning(f"Error fetching message {request_id}: {exception}")
+            else:
+                messages.append(response)
+        
+        # Gmail API batch request - can handle up to 100 requests at once
+        batch_size = 100
+        for i in range(0, len(message_ids), batch_size):
+            batch_ids = message_ids[i:i+batch_size]
+            batch = service.new_batch_http_request(callback=callback)
+            
+            for msg_id in batch_ids:
+                batch.add(service.users().messages().get(
+                    userId=user_id,
+                    id=msg_id,
+                    format=format
+                ))
+            
+            batch.execute()
+        
+        logger.info(f"Batch fetched {len(messages)} messages out of {len(message_ids)} requested")
+        return messages
+        
+    except Exception as e:
+        logger.error(f"Error in batch_get_messages: {e}", exc_info=True)
+        # Fallback to individual fetches if batch fails
+        for msg_id in message_ids:
+            msg = get_message(credentials, msg_id, user_id, format)
+            if msg:
+                messages.append(msg)
+        return messages
+
 # --- Gmail Endpoints (will be registered with credentials dependency) ---
 # These will be added to the router in app.py with the credentials dependency
 
@@ -166,7 +219,7 @@ def register_endpoints(get_current_credentials):
     )
     def gmail_list_messages_endpoint(
         q: Optional[str] = Query(None, description="Gmail search query"),
-        max_results: int = Query(50, ge=1, le=500),
+        max_results: int = Query(20, ge=1, le=500),
         label_ids: Optional[List[str]] = Query(None, description="Filter by label IDs"),
         user_id: str = Query('me', description="User id"),
         creds: Credentials = Depends(get_current_credentials)
@@ -260,4 +313,35 @@ def register_endpoints(get_current_credentials):
         if result is None:
             raise HTTPException(status_code=500, detail="Failed to list Gmail labels")
         return result
+
+    @router.post(
+        "/messages:batchGet",
+        summary="Batch get Gmail messages",
+        operation_id="gmail_batch_get_messages"
+    )
+    def gmail_batch_get_endpoint(
+        message_ids: List[str] = Body(..., description="List of message IDs to fetch"),
+        format: str = Body('full', description="Message format (minimal, full, raw, metadata)"),
+        user_id: str = Body('me', description="User id"),
+        creds: Credentials = Depends(get_current_credentials)
+    ):
+        """
+        Batch fetch multiple Gmail messages in a single request.
+        Much faster than fetching messages one by one.
+        """
+        if not message_ids:
+            raise HTTPException(status_code=400, detail="message_ids list is required")
+        
+        messages = batch_get_messages(
+            credentials=creds,
+            message_ids=message_ids,
+            user_id=user_id,
+            format=format
+        )
+        
+        return {
+            "messages": messages,
+            "total": len(messages),
+            "requested": len(message_ids)
+        }
 

@@ -15,13 +15,21 @@ import json
 from datetime import datetime
 from uuid import uuid4
 
+from fastapi.middleware.cors import CORSMiddleware
+
 # Load environment variables BEFORE importing memory modules
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
-from llm_service.summarizer import generate_summary
-from llm_service.action_extractor import extract_action_items
-from llm_service.memory.retriever import get_unified_retriever
+try:
+    from llm_service.summarizer import generate_summary
+    from llm_service.action_extractor import extract_action_items
+    from llm_service.memory.retriever import get_unified_retriever
+except ModuleNotFoundError:
+    # Running from llm_service directory
+    from summarizer import generate_summary
+    from action_extractor import extract_action_items
+    from memory.retriever import get_unified_retriever
 try:
     from llm_service.utils.scoring import heuristic_priority_score, label_from_score
 except Exception:
@@ -35,6 +43,14 @@ app = FastAPI(
     title="LLM Service - OpenAI + Qdrant + Redis (LangChain)",
     description="AI-powered text analysis with semantic memory and conversation tracking",
     version="0.3.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or ["*"] if you want to allow all for dev
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Initialize unified memory system on startup

@@ -33,13 +33,20 @@ def _compute_message_signature(msg: Dict[str, Any]) -> str:
         return ""
 
 def _parse_timestamp(ts: str) -> datetime:
-    """Parse timestamp string to datetime object."""
+    """Parse timestamp string to datetime object (always timezone-aware)."""
     try:
         if ts:
-            return parser.parse(ts)
+            dt = parser.parse(ts)
+            # Make timezone-aware if naive
+            if dt.tzinfo is None:
+                from datetime import timezone
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
     except Exception as e:
         logger.debug(f"Could not parse timestamp '{ts}': {e}")
-    return datetime.min
+    # Return timezone-aware min datetime
+    from datetime import timezone
+    return datetime.min.replace(tzinfo=timezone.utc)
 
 def merge_unified_inbox(
     gmail_messages: List[Dict[str, Any]],
