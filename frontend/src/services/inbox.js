@@ -115,3 +115,29 @@ export const getMessageById = async (messageId) => {
   return message;
 };
 
+/**
+ * Get AI summaries by source (Gmail, Outlook, Teams)
+ * @param {Object} params - Query parameters
+ * @returns {Promise} AI summaries for each source
+ */
+export const getAISummaryBySource = async (params = {}) => {
+  const {
+    max_per_source = 20,
+    mode = 'executive',
+    max_words = 200
+  } = params;
+
+  console.log('🤖 Calling AI summarization:', { max_per_source, mode, max_words });
+
+  const response = await api.post('/unified/inbox/summarize-by-source', null, {
+    params: {
+      max_per_source,
+      mode,
+      max_words
+    }
+  });
+
+  console.log('✅ AI summary response:', response.data);
+  return response.data;
+};
+

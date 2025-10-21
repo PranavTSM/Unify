@@ -357,6 +357,141 @@ async def summarize_inbox(request: SummarizeRequest):
             detail=f"Failed to summarize messages: {str(e)}"
         )
  
+@app.post("/unified/inbox/summarize-by-source")
+async def summarize_inbox_by_source(
+    max_per_source: int = Query(default=20, ge=1, le=100),
+    mode: str = Query(default="executive", regex="^(executive|bullets|paragraph)$"),
+    max_words: int = Query(default=200, ge=50, le=500)
+):
+    """
+    Summarize messages by source (Gmail, Outlook, Teams).
+    
+    Fetches 20 messages from each source and generates AI summaries for each source separately.
+    This gives you a quick overview of what's happening in each communication channel.
+    
+    Args:
+        max_per_source: Number of messages to fetch per source (default: 20)
+        mode: Summary mode - 'executive', 'bullets', or 'paragraph'
+        max_words: Maximum words per summary (default: 200)
+        
+    Returns:
+        Summaries organized by source with message details
+    """
+    try:
+        logger.info(f"📊 Summarizing inbox by source: {max_per_source} messages per source")
+        
+        # Check LLM service health
+        if not llm_client.health_check():
+            raise HTTPException(
+                status_code=503,
+                detail="LLM service is not available. Please check if it's running on port 8002."
+            )
+        
+        # Fetch messages from all sources
+        result = aggregator_service.aggregate_messages(
+            max_per_source=max_per_source,
+            include_raw=False
+        )
+        
+        all_messages = result.get("normalized", [])
+        by_source = result.get("by_source", {})
+        
+        if not all_messages:
+            return {
+                "status": "success",
+                "summaries": {},
+                "total_messages": 0,
+                "message": "No messages found. Please ensure you're authenticated with Gmail, Outlook, or Teams."
+            }
+        
+        # Organize and summarize by source
+        summaries_by_source = {}
+        
+        for source in ["gmail", "outlook", "teams"]:
+            source_messages = by_source.get(source, [])
+            
+            if not source_messages:
+                summaries_by_source[source] = {
+                    "summary": f"No {source} messages available",
+                    "bullets": [],
+                    "message_count": 0,
+                    "messages": []
+                }
+                continue
+            
+            logger.info(f"✉️  Summarizing {len(source_messages)} messages from {source}")
+            
+            try:
+                # Call LLM service for this source
+                summary_result = llm_client.summarize_batch(
+                    messages=source_messages,
+                    mode=mode,
+                    max_words=max_words
+                )
+                
+                # Extract message previews
+                message_previews = [
+                    {
+                        "id": msg.get("id"),
+                        "subject": msg.get("subject", "No Subject"),
+                        "sender": msg.get("sender", {}).get("name") or msg.get("sender", {}).get("email") or "Unknown",
+                        "timestamp": msg.get("timestamp"),
+                        "importance_score": msg.get("importance_score", 0.5),
+                        "is_read": msg.get("is_read", False),
+                        "body_preview": msg.get("body_preview", "")[:100] + "..." if msg.get("body_preview") else ""
+                    }
+                    for msg in source_messages[:10]  # Show preview of top 10
+                ]
+                
+                summaries_by_source[source] = {
+                    "summary": summary_result.get("summary", ""),
+                    "bullets": summary_result.get("bullets", []),
+                    "message_count": len(source_messages),
+                    "messages": message_previews,
+                    "status": "success"
+                }
+                
+            except Exception as e:
+                logger.error(f"❌ Error summarizing {source} messages: {e}")
+                summaries_by_source[source] = {
+                    "summary": f"Error generating summary for {source}",
+                    "bullets": [],
+                    "message_count": len(source_messages),
+                    "messages": [],
+                    "status": "error",
+                    "error": str(e)
+                }
+        
+        # Calculate totals
+        total_messages = sum(s.get("message_count", 0) for s in summaries_by_source.values())
+        
+        response = {
+            "status": "success",
+            "summaries_by_source": summaries_by_source,
+            "total_messages": total_messages,
+            "mode": mode,
+            "max_words": max_words,
+            "timestamp": datetime.utcnow().isoformat(),
+            "sources": {
+                "gmail": summaries_by_source.get("gmail", {}).get("message_count", 0),
+                "outlook": summaries_by_source.get("outlook", {}).get("message_count", 0),
+                "teams": summaries_by_source.get("teams", {}).get("message_count", 0)
+            }
+        }
+        
+        logger.info(f"✅ Successfully generated summaries for {total_messages} messages across all sources")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error in summarize by source: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to summarize inbox by source: {str(e)}"
+        )
+
+
 class ExtractActionsRequest(BaseModel):
     """Request model for action extraction."""
     message_ids: Optional[List[str]] = None

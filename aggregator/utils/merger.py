@@ -78,12 +78,31 @@ def merge_unified_inbox(
     # Combine all messages
     all_messages = gmail_messages + outlook_messages + teams_messages
     
+    # TEMPORARILY: Don't filter errors - show everything to debug
+    valid_messages = []
+    error_count = 0
+    
+    for msg in all_messages:
+        if msg is None:
+            error_count += 1
+            logger.warning(f"⚠️ Skipping None message")
+            continue
+        # DISABLED: Don't filter error messages - we want to see them
+        # if isinstance(msg, dict) and 'error' in msg:
+        #     error_count += 1
+        #     logger.debug(f"Skipping error message: {msg.get('id', 'unknown')}")
+        #     continue
+        valid_messages.append(msg)
+    
+    if error_count > 0:
+        logger.info(f"Found {error_count} None messages (filtered out)")
+    
     # Deduplicate based on message signatures
     seen_signatures: Set[str] = set()
     unique_messages: List[Dict[str, Any]] = []
     duplicates = 0
     
-    for msg in all_messages:
+    for msg in valid_messages:
         signature = _compute_message_signature(msg)
         
         # Skip if we've seen this message before (or if signature is empty)
