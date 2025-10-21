@@ -60,11 +60,11 @@ def generate_summary(text: str, max_length: int = 150) -> str:
             logger.warning("OPENAI_API_KEY not set, using truncation")
             return text[:max_length] + "..."
         
-        # Initialize LangChain ChatOpenAI
+        # Initialize LangChain ChatOpenAI with gpt-4o-mini
         llm = ChatOpenAI(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             temperature=0.3,
-            max_tokens=100,
+            max_tokens=200,
             openai_api_key=api_key
         )
         
