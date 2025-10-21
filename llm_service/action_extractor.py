@@ -53,10 +53,11 @@ def extract_action_items(text: str, context: str = "") -> List[Dict[str, Any]]:
             logger.warning("OPENAI_API_KEY not set, returning empty actions")
             return []
         
-        # Initialize LangChain ChatOpenAI
+        # Initialize LangChain ChatOpenAI with gpt-4o-mini
         llm = ChatOpenAI(
-            model="gpt-3.5-turbo",
-            temperature=0.0,  # Low temperature for structured extraction
+            model="gpt-4o-mini",
+            temperature=0.3,
+            max_tokens=200,
             openai_api_key=api_key
         )
         

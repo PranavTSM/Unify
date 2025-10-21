@@ -21,10 +21,23 @@ from db.repository import MessageRepository, EventRepository, FetchLogRepository
 logger = logging.getLogger(__name__)
 cache = get_cache()
 
-# Initialize MongoDB repositories
-message_repo = MessageRepository()
-event_repo = EventRepository()
-fetch_log_repo = FetchLogRepository()
+# Initialize MongoDB repositories lazily (will be initialized after MongoDB connection)
+message_repo = None
+event_repo = None
+fetch_log_repo = None
+
+
+def _ensure_repos_initialized():
+    """Ensure repositories are initialized. Call this after MongoDB is connected."""
+    global message_repo, event_repo, fetch_log_repo
+    
+    if message_repo is None:
+        message_repo = MessageRepository()
+        event_repo = EventRepository()
+        fetch_log_repo = FetchLogRepository()
+        logger.info("✅ MongoDB repositories initialized")
+    
+    return message_repo, event_repo, fetch_log_repo
  
  
 class AggregatorService:
@@ -124,7 +137,8 @@ class AggregatorService:
         
         # Save to MongoDB for persistence and pagination
         try:
-            saved_count = message_repo.save_messages(normalized_messages)
+            msg_repo, _, _ = _ensure_repos_initialized()
+            saved_count = msg_repo.save_messages(normalized_messages)
             logger.info(f"💾 MongoDB: Saved {saved_count} messages")
         except Exception as e:
             logger.warning(f"MongoDB save failed (continuing anyway): {e}")
@@ -210,7 +224,8 @@ class AggregatorService:
         
         # Save to MongoDB
         try:
-            saved_count = event_repo.save_events(normalized_events)
+            _, evt_repo, _ = _ensure_repos_initialized()
+            saved_count = evt_repo.save_events(normalized_events)
             logger.info(f"💾 MongoDB: Saved {saved_count} events")
         except Exception as e:
             logger.warning(f"MongoDB save failed (continuing anyway): {e}")

@@ -124,7 +124,6 @@ def normalize_gmail_message(gmail_msg: Dict[str, Any]) -> Dict[str, Any]:
             "recipients": recipients,
             "subject": subject,
             "body": body[:1000],  # Limit body size
-            "body_preview": body[:200] if len(body) > 200 else body,
             "timestamp": timestamp,
             "labels": labels,
             "attachments": attachments,
@@ -208,7 +207,6 @@ def normalize_outlook_message(outlook_msg: Dict[str, Any]) -> Dict[str, Any]:
             "recipients": recipients,
             "subject": subject,
             "body": body[:1000],  # Limit body size
-            "body_preview": body[:200] if len(body) > 200 else body,
             "timestamp": timestamp,
             "labels": labels,
             "attachments": attachments,
@@ -230,7 +228,6 @@ def normalize_outlook_message(outlook_msg: Dict[str, Any]) -> Dict[str, Any]:
 def normalize_teams_message(teams_msg: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize Teams message to unified format.
-    Handles both channel messages and chat messages (1:1 and group).
     """
     try:
         msg_id = teams_msg.get('id', '')
@@ -239,21 +236,16 @@ def normalize_teams_message(teams_msg: Dict[str, Any]) -> Dict[str, Any]:
         from_obj = teams_msg.get('from', {})
         if from_obj and 'user' in from_obj:
             sender = {
-                "name": from_obj['user'].get('displayName', 'Unknown'),
+                "name": from_obj['user'].get('displayName', ''),
                 "email": from_obj['user'].get('userPrincipalName', '') or from_obj['user'].get('id', '')
             }
         else:
             sender = {"name": "Unknown", "email": ""}
        
-        # Get chat context (added by optimized endpoint)
-        chat_type = teams_msg.get('_chatType', 'channel')  # 'oneOnOne', 'group', or 'channel'
-        chat_topic = teams_msg.get('_chatTopic', '')
-        chat_id = teams_msg.get('_chatId', '')
-        
-        # Teams messages don't have traditional recipients - use chat context
+        # Teams messages don't have traditional recipients - it's channel-based
         recipients = []
-        
-        # Get subject - use chat topic for group chats, or truncated body
+       
+        # Get subject (Teams messages don't have subjects, use truncated body)
         body_obj = teams_msg.get('body', {})
         body_content = body_obj.get('content', '')
         if body_obj.get('contentType') == 'html':
@@ -261,13 +253,7 @@ def normalize_teams_message(teams_msg: Dict[str, Any]) -> Dict[str, Any]:
         else:
             body = body_content
        
-        # Create smart subject based on chat type
-        if chat_type == 'group' and chat_topic:
-            subject = f"[Group: {chat_topic}] {body[:40]}..." if len(body) > 40 else f"[Group: {chat_topic}] {body}"
-        elif chat_type == 'oneOnOne':
-            subject = f"[Chat] {body[:60]}..." if len(body) > 60 else f"[Chat] {body}"
-        else:
-            subject = body[:50] + '...' if len(body) > 50 else body or '(No content)'
+        subject = body[:50] + '...' if len(body) > 50 else body
        
         # Parse timestamp
         timestamp_str = teams_msg.get('createdDateTime')
@@ -298,8 +284,8 @@ def normalize_teams_message(teams_msg: Dict[str, Any]) -> Dict[str, Any]:
         # Teams messages are always "read" from API perspective
         is_read = True
        
-        # Use chat_id if available, otherwise channel ID
-        thread_id = chat_id or teams_msg.get('channelIdentity', {}).get('channelId', '') or teams_msg.get('chatId', '')
+        # Channel/chat ID as thread
+        thread_id = teams_msg.get('channelIdentity', {}).get('channelId', '') or teams_msg.get('chatId', '')
        
         return {
             "id": msg_id,
@@ -308,19 +294,13 @@ def normalize_teams_message(teams_msg: Dict[str, Any]) -> Dict[str, Any]:
             "recipients": recipients,
             "subject": subject,
             "body": body[:1000],  # Limit body size
-            "body_preview": body[:200] if len(body) > 200 else body,
             "timestamp": timestamp,
             "labels": labels,
             "attachments": attachments,
             "thread_id": thread_id,
             "is_read": is_read,
-            "importance_score": 0.6 if chat_type == 'oneOnOne' else 0.5,
-            "summary": None,
-            "metadata": {
-                "chat_type": chat_type,
-                "chat_topic": chat_topic,
-                "platform": "Microsoft Teams"
-            }
+            "importance_score": 0.5,
+            "summary": None
         }
    
     except Exception as e:
