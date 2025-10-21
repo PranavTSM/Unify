@@ -23,14 +23,25 @@ class MCPFetcher:
         try:
             url = f"{self.base_url}{endpoint}"
             logger.info(f"Fetching from: {url}")
-            response = self.session.get(url, params=params, timeout=30)
+            response = self.session.get(url, params=params, timeout=60)  # Increased to 60s
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.Timeout:
+            logger.error(f"⏱️ TIMEOUT fetching from {endpoint} - MCP server not responding")
+            logger.error(f"   Make sure MCP server is running on {self.base_url}")
+            return None
+        except requests.exceptions.ConnectionError:
+            logger.error(f"🔌 CONNECTION ERROR: Cannot connect to MCP server at {self.base_url}")
+            logger.error(f"   Start MCP server: cd mcp_server && python app.py")
+            return None
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 400:
                 logger.warning(f"Bad request for {endpoint}: {e.response.text}")
             elif e.response.status_code == 404:
                 logger.warning(f"Endpoint not found: {endpoint}")
+            elif e.response.status_code == 401:
+                logger.error(f"🔐 AUTHENTICATION REQUIRED for {endpoint}")
+                logger.error(f"   Authenticate at: {self.base_url}/google/auth or /msgraph/auth")
             else:
                 logger.error(f"HTTP error fetching from {endpoint}: {e}")
             return None
@@ -46,11 +57,19 @@ class MCPFetcher:
             response = self.session.post(url, json=json_data, timeout=60)
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.Timeout:
+            logger.error(f"⏱️ TIMEOUT posting to {endpoint}")
+            return None
+        except requests.exceptions.ConnectionError:
+            logger.error(f"🔌 CONNECTION ERROR: Cannot connect to {self.base_url}")
+            return None
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 400:
                 logger.warning(f"Bad request for {endpoint}: {e.response.text}")
             elif e.response.status_code == 404:
                 logger.warning(f"Endpoint not found: {endpoint}")
+            elif e.response.status_code == 401:
+                logger.error(f"🔐 AUTHENTICATION REQUIRED for {endpoint}")
             else:
                 logger.error(f"HTTP error posting to {endpoint}: {e}")
             return None

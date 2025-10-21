@@ -1,6 +1,38 @@
-# ⚡ IMPORTANT: What's Been Fixed
+# ⚡ IMPORTANT: Recent Updates
 
-## 🎉 Two Major Updates Complete!
+## 🎉 Three Major Features Complete!
+
+---
+
+## ✨ NEW: AI Inbox Summarization by Source
+
+**Feature**: Get AI-powered summaries of 20 messages from each source (Gmail, Outlook, Teams)
+
+### Quick Test
+```bash
+curl -X POST "http://localhost:8001/unified/inbox/summarize-by-source?max_per_source=20&mode=executive"
+```
+
+Or run the test script:
+```bash
+python test_ai_summarization.py
+```
+
+### What It Does
+- 📧 Fetches 20 messages from Gmail, Outlook, and Teams
+- 🤖 Generates AI summaries using GPT-4o mini
+- 📊 Organizes results by source
+- ⚡ Fast responses (10-15 seconds)
+- 💰 Very cheap (~$0.003 per request)
+
+### Summary Modes
+- **executive** - Quick overview
+- **bullets** - Action items list  
+- **paragraph** - Detailed context
+
+### Documentation
+- 📘 [AI_SUMMARIZATION_GUIDE.md](AI_SUMMARIZATION_GUIDE.md) - Complete guide
+- 🚀 [AI_SUMMARIZATION_QUICK_REF.md](AI_SUMMARIZATION_QUICK_REF.md) - Quick reference
 
 ---
 

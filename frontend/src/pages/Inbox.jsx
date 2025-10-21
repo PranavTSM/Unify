@@ -13,10 +13,14 @@ import {
   Archive,
   Trash2,
   Star,
-  RefreshCw
+  RefreshCw,
+  Sparkles,
+  X,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
-import { getAllMessages } from '@/services/inbox';
+import { getAllMessages, getAISummaryBySource } from '@/services/inbox';
 import { transformMessages } from '@/utils/dataTransform';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ErrorMessage from '@/components/ErrorMessage';
@@ -30,6 +34,10 @@ const Inbox = () => {
   const [activeFilter, setActiveFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
+  const [expandedSources, setExpandedSources] = useState({ gmail: true, outlook: true, teams: true });
   const navigate = useNavigate();
 
   const filters = ['All', 'Gmail', 'Teams', 'Outlook'];
@@ -58,6 +66,15 @@ const Inbox = () => {
 
       const transformed = transformMessages(uniqueMessages);
       console.log('🔄 Inbox: Transformed messages:', transformed.length);
+      
+      // Debug: Count by category
+      const categoryCount = {};
+      transformed.forEach(msg => {
+        const cat = msg.category || 'Unknown';
+        categoryCount[cat] = (categoryCount[cat] || 0) + 1;
+      });
+      console.log('📊 Inbox: Messages by category:', categoryCount);
+      console.log('📋 Inbox: Sample transformed messages:', transformed.slice(0, 3));
       
       setAllMessages(transformed);
       
@@ -97,6 +114,51 @@ const Inbox = () => {
     setRefreshing(false);
   };
 
+  const handleAISummary = async () => {
+    try {
+      setSummaryLoading(true);
+      setShowSummary(true);
+      const data = await getAISummaryBySource({ max_per_source: 20, mode: 'executive' });
+      setSummaryData(data);
+    } catch (err) {
+      console.error('Error fetching AI summary:', err);
+      setError(err);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const toggleSourceExpanded = (source) => {
+    setExpandedSources(prev => ({
+      ...prev,
+      [source]: !prev[source]
+    }));
+  };
+
+  const getSourceIcon = (source) => {
+    const icons = {
+      gmail: '📧',
+      outlook: '📨',
+      teams: '💬'
+    };
+    return icons[source] || '📬';
+  };
+
+  const parseSummary = (summary) => {
+    if (!summary) return { overview: '', bullets: [] };
+    
+    const lines = summary.split('\n').filter(line => line.trim());
+    const overview = lines[0]?.replace(/^Overview:\s*/i, '').trim() || '';
+    
+    const bullets = lines
+      .slice(1)
+      .filter(line => line.match(/^[•\-\*\d\.]/))
+      .map(line => line.replace(/^[•\-\*\d\.\s]+/, '').trim())
+      .filter(Boolean);
+    
+    return { overview, bullets: bullets.length > 0 ? bullets : [] };
+  };
+
   // Filter messages by category and search
   const filteredMessages = allMessages.filter(m => {
     // Filter by category (case-insensitive)
@@ -117,6 +179,23 @@ const Inbox = () => {
     
     return true;
   });
+
+  // Debug filtered messages
+  React.useEffect(() => {
+    if (allMessages.length > 0) {
+      console.log('🔍 Filter Debug:', {
+        activeFilter,
+        totalMessages: allMessages.length,
+        filteredCount: filteredMessages.length,
+        byCategory: {
+          All: allMessages.length,
+          Gmail: allMessages.filter(m => m.category?.toLowerCase() === 'gmail').length,
+          Outlook: allMessages.filter(m => m.category?.toLowerCase() === 'outlook').length,
+          Teams: allMessages.filter(m => m.category?.toLowerCase() === 'teams').length
+        }
+      });
+    }
+  }, [activeFilter, allMessages, filteredMessages.length]);
 
   const handleViewDetails = () => {
     navigate(`/details/${selectedMessage.id}`);
@@ -165,14 +244,30 @@ const Inbox = () => {
           <h2 className="text-lg font-semibold text-gray-900">
             Inbox ({filteredMessages.length})
           </h2>
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          </Button>
+          <div className="flex items-center space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleAISummary}
+              disabled={summaryLoading}
+              className="bg-gradient-to-r from-purple-500 to-blue-500 text-white border-0 hover:from-purple-600 hover:to-blue-600"
+            >
+              {summaryLoading ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4 mr-2" />
+              )}
+              AI Summary
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
         </div>
 
         {/* Messages */}
@@ -233,6 +328,160 @@ const Inbox = () => {
           </Button>
         </div>
       </div>
+
+      {/* AI Summary Panel */}
+      {showSummary && (
+        <div className="w-96 border-l border-gray-200 flex flex-col bg-white overflow-hidden">
+          <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-purple-500 to-blue-500 text-white flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Sparkles className="w-5 h-5" />
+              <h3 className="font-semibold">AI Summary</h3>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => setShowSummary(false)}
+              className="text-white hover:bg-white/20"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {summaryLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <RefreshCw className="w-8 h-8 animate-spin text-purple-500 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">Generating AI summaries...</p>
+                </div>
+              </div>
+            ) : summaryData ? (
+              <div className="space-y-4">
+                <div className="text-sm text-gray-600 mb-4">
+                  <p className="font-medium">Total: {summaryData.total_messages} messages</p>
+                  <p className="text-xs text-gray-500">20 messages per source</p>
+                </div>
+
+                {['gmail', 'outlook', 'teams'].map(source => {
+                  const sourceData = summaryData.summaries_by_source?.[source];
+                  if (!sourceData) return null;
+
+                  const messageCount = sourceData.message_count || 0;
+                  const isExpanded = expandedSources[source];
+
+                  return (
+                    <div key={source} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => toggleSourceExpanded(source)}
+                        className="w-full p-3 bg-gray-50 hover:bg-gray-100 flex items-center justify-between transition-colors"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xl">{getSourceIcon(source)}</span>
+                          <span className="font-semibold text-gray-900 capitalize">{source}</span>
+                          <Badge variant="secondary" className="text-xs">
+                            {messageCount}
+                          </Badge>
+                        </div>
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-gray-500" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-500" />
+                        )}
+                      </button>
+
+                      {isExpanded && (
+                        <div className="p-4 bg-white">
+                          {messageCount === 0 ? (
+                            <p className="text-sm text-gray-500 italic">{sourceData.summary}</p>
+                          ) : (
+                            <>
+                              {(() => {
+                                const parsed = parseSummary(sourceData.summary);
+                                return (
+                                  <>
+                                    {/* Overview */}
+                                    {parsed.overview && (
+                                      <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-100">
+                                        <p className="text-sm font-medium text-gray-800 leading-relaxed">
+                                          {parsed.overview}
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {/* Bullet Points */}
+                                    {parsed.bullets && parsed.bullets.length > 0 && (
+                                      <div className="space-y-2 mb-4">
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                          Key Points
+                                        </p>
+                                        {parsed.bullets.map((bullet, idx) => (
+                                          <div 
+                                            key={idx} 
+                                            className="flex items-start space-x-3 p-2 rounded hover:bg-gray-50 transition-colors"
+                                          >
+                                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold mt-0.5">
+                                              {idx + 1}
+                                            </span>
+                                            <span className="text-sm text-gray-700 flex-1 leading-relaxed">
+                                              {bullet}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* Recent Messages Preview */}
+                                    {sourceData.messages && sourceData.messages.length > 0 && (
+                                      <div className="pt-3 border-t border-gray-100">
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                          Recent Messages
+                                        </p>
+                                        <div className="space-y-2">
+                                          {sourceData.messages.slice(0, 3).map((msg, idx) => (
+                                            <div 
+                                              key={idx} 
+                                              className="p-2 bg-gray-50 rounded-lg border border-gray-100 hover:border-purple-200 hover:bg-purple-50/30 transition-all cursor-pointer"
+                                            >
+                                              <div className="flex items-start justify-between mb-1">
+                                                <p className="text-xs font-semibold text-gray-900 flex-1 truncate">
+                                                  {msg.subject}
+                                                </p>
+                                                {!msg.is_read && (
+                                                  <span className="ml-2 w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1"></span>
+                                                )}
+                                              </div>
+                                              <p className="text-xs text-gray-500 truncate">
+                                                {msg.sender}
+                                              </p>
+                                              {msg.importance_score >= 0.7 && (
+                                                <Badge variant="destructive" className="text-xs mt-1">
+                                                  High Priority
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p>Click "AI Summary" to generate summaries</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Message Preview */}
       <div className="flex-1 flex flex-col">

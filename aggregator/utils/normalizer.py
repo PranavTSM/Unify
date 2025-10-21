@@ -228,39 +228,103 @@ def normalize_outlook_message(outlook_msg: Dict[str, Any]) -> Dict[str, Any]:
 def normalize_teams_message(teams_msg: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize Teams message to unified format.
+    Handles both channel messages and chat messages.
     """
     try:
-        msg_id = teams_msg.get('id', '')
+        # Handle None or invalid messages gracefully
+        if teams_msg is None or not isinstance(teams_msg, dict):
+            logger.warning(f"⚠️ Invalid Teams message: {type(teams_msg)}")
+            return None  # Will be filtered out in merger
+        
+        msg_id = teams_msg.get('id', f'teams_{hash(str(teams_msg))}')
+        
+        # Debug: Log COMPLETE first valid message to understand structure
+        if not hasattr(normalize_teams_message, '_logged_first'):
+            import json
+            logger.info("="*80)
+            logger.info("📝 COMPLETE Teams Message Sample (first valid message):")
+            logger.info("="*80)
+            try:
+                # Pretty print the entire message
+                logger.info(json.dumps(teams_msg, indent=2, default=str))
+            except:
+                logger.info(str(teams_msg))
+            logger.info("="*80)
+            logger.info(f"Available keys: {list(teams_msg.keys())}")
+            logger.info("="*80)
+            normalize_teams_message._logged_first = True
        
-        # Extract sender
+        # Extract sender - be VERY forgiving, accept ANY name
+        sender_name = "Teams User"
+        sender_email = ""
+        
+        # Try to extract sender from ANY available field
         from_obj = teams_msg.get('from', {})
-        if from_obj and 'user' in from_obj:
-            sender = {
-                "name": from_obj['user'].get('displayName', ''),
-                "email": from_obj['user'].get('userPrincipalName', '') or from_obj['user'].get('id', '')
-            }
-        else:
-            sender = {"name": "Unknown", "email": ""}
+        if isinstance(from_obj, dict):
+            # Try nested user object
+            if 'user' in from_obj:
+                user = from_obj['user']
+                sender_name = user.get('displayName') or user.get('name') or sender_name
+                sender_email = user.get('userPrincipalName', '') or user.get('mail', '') or user.get('id', '')
+            # Try direct fields
+            else:
+                sender_name = from_obj.get('displayName') or from_obj.get('name') or sender_name
+                sender_email = from_obj.get('userPrincipalName', '') or from_obj.get('id', '')
+        
+        # Try other possible sender fields
+        if sender_name == "Teams User":
+            if teams_msg.get('sender'):
+                s = teams_msg['sender']
+                sender_name = s.get('displayName') or s.get('name') or sender_name
+                sender_email = s.get('email', '') or s.get('userPrincipalName', '')
+            elif teams_msg.get('createdBy'):
+                cb = teams_msg['createdBy']
+                sender_name = cb.get('displayName') or cb.get('name') or sender_name
+                sender_email = cb.get('email', '') or cb.get('userPrincipalName', '')
+        
+        sender = {"name": sender_name, "email": sender_email}
        
-        # Teams messages don't have traditional recipients - it's channel-based
+        # Teams messages don't have traditional recipients
         recipients = []
        
-        # Get subject (Teams messages don't have subjects, use truncated body)
-        body_obj = teams_msg.get('body', {})
-        body_content = body_obj.get('content', '')
-        if body_obj.get('contentType') == 'html':
-            body = strip_html(body_content)
-        else:
-            body = body_content
+        # Get body/content - be VERY forgiving
+        body = ""
+        
+        # Try body object
+        body_obj = teams_msg.get('body')
+        if isinstance(body_obj, dict):
+            body_content = body_obj.get('content', '')
+            if body_obj.get('contentType') == 'html' and body_content:
+                body = strip_html(body_content)
+            else:
+                body = body_content
+        elif isinstance(body_obj, str):
+            body = body_obj
+        
+        # Try other fields
+        if not body:
+            body = teams_msg.get('content', '') or teams_msg.get('bodyPreview', '') or teams_msg.get('summary', '')
+        
+        # Last resort: show SOMETHING
+        if not body:
+            body = f"Teams message {msg_id}"
        
+        # Create subject from body
         subject = body[:50] + '...' if len(body) > 50 else body
        
-        # Parse timestamp
-        timestamp_str = teams_msg.get('createdDateTime')
+        # Parse timestamp - be VERY forgiving
+        timestamp_str = (teams_msg.get('createdDateTime') or 
+                        teams_msg.get('lastModifiedDateTime') or 
+                        teams_msg.get('timestamp') or
+                        teams_msg.get('receivedDateTime'))
+        
+        timestamp = datetime.now().isoformat()  # Default to now
         if timestamp_str:
-            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00')).isoformat()
-        else:
-            timestamp = datetime.now().isoformat()
+            try:
+                # Handle ISO format with Z
+                timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00')).isoformat()
+            except:
+                pass  # Keep default
        
         # Labels (message type, etc.)
         labels = []
@@ -284,10 +348,11 @@ def normalize_teams_message(teams_msg: Dict[str, Any]) -> Dict[str, Any]:
         # Teams messages are always "read" from API perspective
         is_read = True
        
-        # Channel/chat ID as thread
-        thread_id = teams_msg.get('channelIdentity', {}).get('channelId', '') or teams_msg.get('chatId', '')
+        # Channel/chat ID as thread (handle None values safely)
+        channel_identity = teams_msg.get('channelIdentity') or {}
+        thread_id = channel_identity.get('channelId', '') or teams_msg.get('chatId', '') or ''
        
-        return {
+        normalized = {
             "id": msg_id,
             "source": "teams",
             "sender": sender,
@@ -302,15 +367,24 @@ def normalize_teams_message(teams_msg: Dict[str, Any]) -> Dict[str, Any]:
             "importance_score": 0.5,
             "summary": None
         }
+        
+        # Debug: Log first successful normalization
+        if not hasattr(normalize_teams_message, '_logged_success'):
+            logger.info("✅ First successfully normalized Teams message:")
+            logger.info(f"   ID: {msg_id}")
+            logger.info(f"   Sender: {sender['name']}")
+            logger.info(f"   Subject: {subject[:50]}")
+            logger.info(f"   Body: {body[:100]}...")
+            logger.info(f"   Timestamp: {timestamp}")
+            normalize_teams_message._logged_success = True
+        
+        return normalized
    
     except Exception as e:
-        logger.error(f"Error normalizing Teams message {teams_msg.get('id')}: {e}")
-        return {
-            "id": teams_msg.get('id', 'unknown'),
-            "source": "teams",
-            "error": str(e),
-            "raw": teams_msg
-        }
+        logger.error(f"❌ Error normalizing Teams message {teams_msg.get('id') if isinstance(teams_msg, dict) else 'N/A'}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None  # Will be filtered out in merger
  
 def normalize_messages(messages: List[Dict[str, Any]], source: str) -> List[Dict[str, Any]]:
     """
@@ -323,7 +397,7 @@ def normalize_messages(messages: List[Dict[str, Any]], source: str) -> List[Dict
     Returns:
         List of normalized messages
     """
-    logger.info(f"Normalizing {len(messages)} messages from {source}")
+    logger.info(f"📥 Normalizing {len(messages)} messages from {source}")
    
     normalizers = {
         "gmail": normalize_gmail_message,
@@ -336,7 +410,19 @@ def normalize_messages(messages: List[Dict[str, Any]], source: str) -> List[Dict
         logger.error(f"No normalizer found for source: {source}")
         return []
    
-    return [normalizer(msg) for msg in messages]
+    # Normalize all messages
+    normalized = [normalizer(msg) for msg in messages]
+    
+    # Filter out None values
+    valid = [msg for msg in normalized if msg is not None]
+    none_count = len(normalized) - len(valid)
+    
+    if none_count > 0:
+        logger.warning(f"⚠️ {source}: {none_count} messages failed normalization (returned None)")
+    
+    logger.info(f"✅ {source}: Successfully normalized {len(valid)}/{len(messages)} messages")
+    
+    return valid
  
 def normalize_calendar_event(event: Dict[str, Any], source: str) -> Dict[str, Any]:
     """

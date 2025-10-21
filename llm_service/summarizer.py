@@ -84,6 +84,12 @@ def generate_summary(text: str, max_length: int = 150) -> str:
         summary = response.content.strip()
         
         logger.info(f"Generated summary of length {len(summary)}")
+        
+        # Clean up bullet formatting
+        summary = summary.replace('•', '•')  # Normalize bullet chars
+        summary = summary.replace('- ', '• ')  # Convert dashes to bullets
+        summary = summary.replace('* ', '• ')  # Convert asterisks to bullets
+        
         return summary
         
     except Exception as e:
