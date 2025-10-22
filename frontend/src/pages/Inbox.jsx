@@ -100,10 +100,10 @@ const Inbox = () => {
   useEffect(() => {
     fetchMessages();
     
-    // Auto-refresh every 30 seconds
+    // Auto-refresh every 2 minutes
     const interval = setInterval(() => {
       fetchMessages(false);
-    }, 30000);
+    }, 120000);
     
     return () => clearInterval(interval);
   }, []);
@@ -210,7 +210,7 @@ const Inbox = () => {
   }
 
   return (
-    <div className="flex h-full bg-white">
+    <div className="flex h-full bg-white relative">
       {/* Messages List */}
       <div className="w-96 border-r border-gray-200 flex flex-col">
         {/* Search and Filters */}
@@ -301,10 +301,10 @@ const Inbox = () => {
                   <div className="w-2 h-2 bg-primary rounded-full"></div>
                 )}
               </div>
-              <p className={`text-sm font-medium text-gray-900 mb-1 ${!message.read ? 'font-semibold' : ''}`}>
+              <p className={`text-sm font-medium text-gray-900 mb-1 break-words ${!message.read ? 'font-semibold' : ''}`}>
                 {message.subject}
               </p>
-              <p className="text-sm text-gray-600 line-clamp-2">{message.preview}</p>
+              <p className="text-sm text-gray-600 line-clamp-2 break-words">{message.preview}</p>
               <div className="flex items-center mt-2 space-x-2">
                 {message.hasAttachment && (
                   <Badge variant="outline" className="text-xs">
@@ -329,9 +329,106 @@ const Inbox = () => {
         </div>
       </div>
 
-      {/* AI Summary Panel */}
+      {/* Message Preview */}
+      <div className="flex-1 flex flex-col">
+        {selectedMessage ? (
+          <>
+            {/* Message Header */}
+            <div className="p-6 border-b border-gray-200 bg-white">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start space-x-4">
+                  <div className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center font-medium text-lg">
+                    {selectedMessage.avatar}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-xl font-semibold text-gray-900 mb-1 break-words">
+                      {selectedMessage.sender}
+                    </h2>
+                    <p className="text-lg text-gray-700 font-medium mb-2 break-words">
+                      {selectedMessage.subject}
+                    </p>
+                    <p className="text-sm text-gray-500 break-words">
+                      {new Date(selectedMessage.time).toLocaleString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="w-5 h-5" />
+                </Button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-2">
+                <Button variant="outline" size="sm" onClick={handleViewDetails}>
+                  <Mail className="w-4 h-4 mr-2" />
+                  View Full Details
+                </Button>
+                <Button variant="outline" size="sm">
+                  <Reply className="w-4 h-4 mr-2" />
+                  Reply
+                </Button>
+                <Button variant="outline" size="sm">
+                  <Forward className="w-4 h-4 mr-2" />
+                  Forward
+                </Button>
+                <div className="flex-1"></div>
+                <Button variant="ghost" size="icon">
+                  <Star className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon">
+                  <Archive className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon">
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Message Content */}
+            <div className="flex-1 p-6 overflow-y-auto overflow-x-hidden bg-gray-50">
+              <div className="max-w-3xl bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                <p className="text-gray-800 leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere">
+                  {selectedMessage.content}
+                </p>
+              </div>
+            </div>
+
+            {/* Reply Box */}
+            <div className="p-4 border-t border-gray-200 bg-white">
+              <div className="flex items-center space-x-2">
+                <Input 
+                  placeholder="Reply to Alice Johnson..." 
+                  className="flex-1"
+                />
+                <Button variant="ghost" size="icon">
+                  <Paperclip className="w-4 h-4" />
+                </Button>
+                <Button>
+                  Send
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-gray-400">
+            <div className="text-center">
+              <Mail className="w-16 h-16 mx-auto mb-4" />
+              <p className="text-lg">Select a message to read</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* AI Summary Panel - Positioned as an overlay on the right */}
       {showSummary && (
-        <div className="w-96 border-l border-gray-200 flex flex-col bg-white overflow-hidden">
+        <div className="absolute right-0 top-0 bottom-0 w-96 border-l border-gray-200 flex flex-col bg-white overflow-hidden shadow-2xl z-50">
           <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-purple-500 to-blue-500 text-white flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Sparkles className="w-5 h-5" />
@@ -482,103 +579,6 @@ const Inbox = () => {
           </div>
         </div>
       )}
-
-      {/* Message Preview */}
-      <div className="flex-1 flex flex-col">
-        {selectedMessage ? (
-          <>
-            {/* Message Header */}
-            <div className="p-6 border-b border-gray-200 bg-white">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center font-medium text-lg">
-                    {selectedMessage.avatar}
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900 mb-1">
-                      {selectedMessage.sender}
-                    </h2>
-                    <p className="text-lg text-gray-700 font-medium mb-2">
-                      {selectedMessage.subject}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {new Date(selectedMessage.time).toLocaleString('en-US', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit'
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="w-5 h-5" />
-                </Button>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center space-x-2">
-                <Button variant="outline" size="sm" onClick={handleViewDetails}>
-                  <Mail className="w-4 h-4 mr-2" />
-                  View Full Details
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Reply className="w-4 h-4 mr-2" />
-                  Reply
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Forward className="w-4 h-4 mr-2" />
-                  Forward
-                </Button>
-                <div className="flex-1"></div>
-                <Button variant="ghost" size="icon">
-                  <Star className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="icon">
-                  <Archive className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="icon">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Message Content */}
-            <div className="flex-1 p-6 overflow-y-auto bg-gray-50">
-              <div className="max-w-3xl bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-                <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
-                  {selectedMessage.content}
-                </p>
-              </div>
-            </div>
-
-            {/* Reply Box */}
-            <div className="p-4 border-t border-gray-200 bg-white">
-              <div className="flex items-center space-x-2">
-                <Input 
-                  placeholder="Reply to Alice Johnson..." 
-                  className="flex-1"
-                />
-                <Button variant="ghost" size="icon">
-                  <Paperclip className="w-4 h-4" />
-                </Button>
-                <Button>
-                  Send
-                </Button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-400">
-            <div className="text-center">
-              <Mail className="w-16 h-16 mx-auto mb-4" />
-              <p className="text-lg">Select a message to read</p>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 };

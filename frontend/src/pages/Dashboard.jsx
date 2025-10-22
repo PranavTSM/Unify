@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { 
   TrendingUp, 
@@ -18,15 +19,16 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import ErrorMessage from '@/components/ErrorMessage';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dashboardStats, setDashboardStats] = useState([]);
   const [messages, setMessages] = useState([]);
   const [todayEvents, setTodayEvents] = useState([]);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (showLoader = true) => {
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
       setError(null);
 
       // Fetch inbox and today's events in parallel
@@ -57,20 +59,20 @@ const Dashboard = () => {
       setDashboardStats(stats);
       setMessages(transformedMessages.slice(0, 5)); // Top 5 recent
       setTodayEvents(transformedEvents);
-      setLoading(false);
+      if (showLoader) setLoading(false);
 
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
       setError(err);
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchDashboardData(true);
     
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchDashboardData, 30000);
+    // Auto-refresh every 2 minutes in background (without showing loader)
+    const interval = setInterval(() => fetchDashboardData(false), 120000);
     return () => clearInterval(interval);
   }, []);
 
@@ -209,14 +211,14 @@ const Dashboard = () => {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <button 
-              onClick={() => window.location.href = '/inbox'}
+              onClick={() => navigate('/inbox')}
               className="p-4 rounded-lg border-2 border-primary bg-primary text-white hover:bg-primary/90 transition-colors text-center"
             >
               <Mail className="w-6 h-6 mx-auto mb-2" />
               <p className="text-sm font-medium">View All Messages</p>
             </button>
             <button 
-              onClick={() => window.location.href = '/calendar'}
+              onClick={() => navigate('/calendar')}
               className="p-4 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary hover:bg-primary/5 transition-colors text-center"
             >
               <Users className="w-6 h-6 mx-auto mb-2 text-gray-600" />
